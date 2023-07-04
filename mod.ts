@@ -6,6 +6,7 @@ import {
 import * as path from "https://deno.land/std@0.192.0/path/mod.ts";
 import { signToken } from "https://deno.land/x/statebacked_token@v0.2.0/mod.ts";
 import { Database } from "./supabase.ts";
+import { build } from "./src/build.ts";
 
 type SupabaseClient = RawSupabaseClient<Database>;
 
@@ -108,7 +109,15 @@ function main() {
     )
     .option(
       "-f, --file <file>",
-      "Path to the single javascript file that exports the machine definition. If not specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the single javascript file that exports the machine definition. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+    )
+    .option(
+      "-d, --deno <file>",
+      "Path to the Deno entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+    )
+    .option(
+      "-n, --node <file>",
+      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .action(createMachine);
 
@@ -122,9 +131,17 @@ function main() {
       "-r, --version-reference <versionReference>",
       "Name for the version. E.g. git commit sha or semantic version identifier.",
     )
-    .requiredOption(
+    .option(
       "-f, --file <file>",
-      "Path to the single javascript file that exports the machine definition. (required)",
+      "Path to the single javascript file that exports the machine definition. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+    )
+    .option(
+      "-d, --deno <file>",
+      "Path to the Deno entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+    )
+    .option(
+      "-n, --node <file>",
+      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .option(
       "-c, --make-current",
@@ -660,7 +677,13 @@ async function createKey(
 }
 
 async function createMachine(
-  opts: { machine: string; versionReference?: string; file?: string },
+  opts: {
+    machine: string;
+    versionReference?: string;
+    file?: string;
+    node?: string;
+    deno?: string;
+  },
   options: Command,
 ) {
   const headers = await getHeaders(options);
@@ -684,12 +707,14 @@ async function createMachine(
 
   console.log(`Created machine: '${opts.machine}'`);
 
-  if (opts.file) {
+  if (opts.file || opts.node || opts.deno) {
     await createMachineVersion(
       {
         machine: opts.machine,
         versionReference: opts.versionReference ?? "0.0.1",
         file: opts.file,
+        node: opts.node,
+        deno: opts.deno,
         makeCurrent: true,
       },
       options,
@@ -737,11 +762,38 @@ async function createMachineVersion(
   opts: {
     machine: string;
     versionReference: string;
-    file: string;
+    file?: string;
+    node?: string;
+    deno?: string;
     makeCurrent: boolean;
   },
   options: Command,
 ) {
+  const count = [opts.file, opts.node, opts.deno].filter(Boolean).length;
+
+  if (count !== 1) {
+    throw new InvalidArgumentError(
+      "Exactly one of --file, --node or --deno must be specified",
+    );
+  }
+
+  const code = opts.file
+    ? {
+      fileName: path.basename(opts.file),
+      code: await Deno.readFile(opts.file),
+    }
+    : opts.deno
+    ? await build(opts.deno, "deno")
+    : opts.node
+    ? await build(opts.node, "node")
+    : null;
+
+  if (!code) {
+    throw new InvalidArgumentError(
+      "Exactly one of --file, --node or --deno must be specified",
+    );
+  }
+
   const headers = await getHeaders(options);
 
   const versionCreationStep1Res = await fetch(
@@ -754,7 +806,8 @@ async function createMachineVersion(
   );
   if (!versionCreationStep1Res.ok) {
     throw new Error(
-      `failed to create version: ${await versionCreationStep1Res.text()}`,
+      `failed to create version (${versionCreationStep1Res.status}): ${await versionCreationStep1Res
+        .text()}`,
     );
   }
 
@@ -769,10 +822,10 @@ async function createMachineVersion(
   uploadForm.set("content-type", "application/javascript");
   uploadForm.append(
     "file",
-    new Blob([await Deno.readFile(opts.file)], {
+    new Blob([code.code], {
       type: "application/javascript",
     }),
-    path.basename(opts.file),
+    code.fileName,
   );
 
   const uploadRes = await fetch(
@@ -784,7 +837,8 @@ async function createMachineVersion(
   );
   if (!uploadRes.ok) {
     throw new Error(
-      `failed to upload code for version: ${await uploadRes.text()}`,
+      `failed to upload code for version (${uploadRes.status}): ${await uploadRes
+        .text()}`,
     );
   }
 
@@ -802,7 +856,8 @@ async function createMachineVersion(
 
   if (!versionCreationStep2Res.ok) {
     throw new Error(
-      `failed to create version: ${await versionCreationStep2Res.text()}`,
+      `failed to create version (${versionCreationStep2Res.status}): ${await versionCreationStep2Res
+        .text()}`,
     );
   }
 

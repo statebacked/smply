@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-cmd="deno fmt ./mod.ts ./supabase.ts ./scripts"
+cmd="deno fmt ./mod.ts ./supabase.ts ./src ./scripts"
 
 if [ "$1" = "--no-docker" ]; then
   exec ${cmd}
