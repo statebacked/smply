@@ -131,3 +131,4 @@ dist
 
 # deno
 /deno_dir
+/npm

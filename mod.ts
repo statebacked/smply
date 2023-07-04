@@ -1,10 +1,13 @@
 import { Command, InvalidArgumentError } from "npm:commander@11.0.0";
 import {
   createClient,
-  SupabaseClient,
+  SupabaseClient as RawSupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2.26.0";
 import * as path from "https://deno.land/std@0.192.0/path/mod.ts";
 import { signToken } from "https://deno.land/x/statebacked_token@v0.2.0/mod.ts";
+import { Database } from "./supabase.ts";
+
+type SupabaseClient = RawSupabaseClient<Database>;
 
 const VERSION = "0.1.0";
 
@@ -430,7 +433,8 @@ async function launchBilling(
     );
   }
 
-  const { url } = await res.json();
+  // deno-lint-ignore no-explicit-any
+  const { url } = await res.json() as any;
   console.log(url);
 }
 
@@ -639,7 +643,8 @@ async function createKey(
     );
   }
 
-  const { id, key } = await createKeyResponse.json();
+  // deno-lint-ignore no-explicit-any
+  const { id, key } = await createKeyResponse.json() as any;
   console.log(
     "Store this key safely now. You can create additional keys in the future but this key will never be shown again!",
   );
@@ -746,7 +751,8 @@ async function createMachineVersion(
   }
 
   const { machineVersionId, codeUploadUrl, codeUploadFields } =
-    await versionCreationStep1Res.json();
+    // deno-lint-ignore no-explicit-any
+    await versionCreationStep1Res.json() as any;
 
   const uploadForm = new FormData();
   for (const [key, value] of Object.entries(codeUploadFields)) {
@@ -915,9 +921,12 @@ async function getMachineInstance(
     name: data.extended_slug.split("/", 3)[2],
     latest_transition: latestTransition && {
       created_at: latestTransition.created_at,
-      state: latestTransition.state.value,
-      event: latestTransition.state.event.data,
-      context: latestTransition.state.context,
+      // deno-lint-ignore no-explicit-any
+      state: (latestTransition.state as any)?.value,
+      // deno-lint-ignore no-explicit-any
+      event: (latestTransition.state as any)?.event.data,
+      // deno-lint-ignore no-explicit-any
+      context: (latestTransition.state as any)?.context,
     },
   });
 }
@@ -968,8 +977,10 @@ async function listMachineInstances(
         created_at: inst.created_at,
         latest_transition: {
           created_at: latestTransition?.created_at,
-          state: latestTransition?.state.value,
-          event: latestTransition?.state.event.data,
+          // deno-lint-ignore no-explicit-any
+          state: (latestTransition?.state as any)?.value,
+          // deno-lint-ignore no-explicit-any
+          event: (latestTransition?.state as any)?.event.data,
         },
         machine_version_id: machineVersion?.id,
         machine_version_reference: machineVersion?.client_info,
@@ -1229,13 +1240,13 @@ function getSupabaseClient(
     "credentials",
   );
 
-  return createClient(
+  return createClient<Database>(
     `https://${projectRef}.supabase.co`,
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6bWplZHltaGxxYW5zbXh0c21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODY5MzExMTEsImV4cCI6MjAwMjUwNzExMX0.1DILVKbYW7lp_lKy5hHaKh9bHLe5bP1OhErCkjW2MJg",
     {
       auth: {
         storage: {
-          getItem: async (key) => {
+          getItem: async (key: string) => {
             if (key === expectedKey) {
               if (accessToken) {
                 return JSON.stringify({ accessToken });
@@ -1253,10 +1264,10 @@ function getSupabaseClient(
             }
             return null;
           },
-          removeItem: (_key) => {
+          removeItem: (_key: string) => {
             return;
           },
-          setItem: async (key, value) => {
+          setItem: async (key: string, value: string) => {
             if (key === expectedKey && store) {
               await Deno.mkdir(path.dirname(tokenFile), {
                 recursive: true,
