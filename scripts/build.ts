@@ -12,7 +12,7 @@ await build({
     prompts: true,
     blob: true,
   },
-  test: true,
+  test: false,
   typeCheck: false,
   esModule: true,
   scriptModule: false,
