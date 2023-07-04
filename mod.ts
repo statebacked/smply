@@ -461,6 +461,8 @@ async function setDefaultOrg(
       mode: 0o600,
     },
   );
+
+  console.log("Successfully set default org");
 }
 
 function getSortOpts(opts: PaginationOptions) {
