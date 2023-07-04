@@ -160,9 +160,13 @@ function main() {
       "-i, --instance <instance>",
       "Instance name. Must be unique for the given machine. (required)",
     )
-    .requiredOption(
+    .option(
       "-t, --token <token>",
-      "JWT signed with one of your State Backed keys that will provide the auth context for the machine instance. You may a key with 'smply keys create' and a token with 'smply token generate'.",
+      "JWT signed with one of your State Backed keys that will provide the auth context for the machine instance. You may a key with 'smply keys create' and a token with 'smply token generate'. Provide only one of --token and --auth-context.",
+    )
+    .option(
+      "-a, --auth-context <authContext>",
+      'JSON auth context to use when creating the machine instance. E.g. \'{"sub": "user_1234"}\' Provide only one of --token and --auth-context.',
     )
     .option("-c, --context <context>", "Initial context")
     .option(
@@ -179,9 +183,13 @@ function main() {
       "-e, --event <event>",
       'JSON (or string) event to send. If JSON, { "type": "...", ...otherData }. (required)',
     )
-    .requiredOption(
+    .option(
       "-t, --token <token>",
-      "JWT signed with one of your State Backed keys that will provide the auth context for the machine instance. You may a key with 'smply keys create' and a token with 'smply token generate'.",
+      "JWT signed with one of your State Backed keys that will provide the auth context for the machine instance. You may a key with 'smply keys create' and a token with 'smply token generate'. Provide only one of --token and --auth-context.",
+    )
+    .option(
+      "-a, --auth-context <authContext>",
+      'JSON auth context to use when creating the machine instance. E.g. \'{"sub": "user_1234"}\' Provide only one of --token and --auth-context.',
     )
     .action(sendEventToMachineInstance);
 
@@ -806,15 +814,26 @@ async function sendEventToMachineInstance(
     machine: string;
     instance: string;
     token: string;
+    authContext: string;
     event: string;
   },
   options: Command,
 ) {
+  if (
+    (!opts.token && !opts.authContext) || (!!opts.token && !!opts.authContext)
+  ) {
+    throw new InvalidArgumentError(
+      "One of --token or --auth-context is required",
+    );
+  }
+
   const eventResponse = await fetch(
     `${getApiURL(options)}/machines/${opts.machine}/i/${opts.instance}/events`,
     {
       headers: {
-        authorization: `Bearer ${opts.token}`,
+        ...(await getHeaders(options)),
+        ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
+        ...(opts.authContext ? { "x-statebacked-act": opts.authContext } : {}),
       },
       method: "POST",
       body: JSON.stringify({
@@ -837,16 +856,27 @@ async function createMachineInstance(
     machine: string;
     instance: string;
     token: string;
+    authContext: string;
     context?: string;
     version?: string;
   },
   options: Command,
 ) {
+  if (
+    (!opts.token && !opts.authContext) || (!!opts.token && !!opts.authContext)
+  ) {
+    throw new InvalidArgumentError(
+      "One of --token or --auth-context is required",
+    );
+  }
+
   const instanceCreationResponse = await fetch(
     `${getApiURL(options)}/machines/${opts.machine}`,
     {
       headers: {
-        authorization: `Bearer ${opts.token}`,
+        ...(await getHeaders(options)),
+        ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
+        ...(opts.authContext ? { "x-statebacked-act": opts.authContext } : {}),
       },
       method: "POST",
       body: JSON.stringify({

@@ -19,8 +19,7 @@ await build({
   package: {
     name: "smply",
     version: Deno.args[0],
-    description:
-      "The CLI the StateBacked.dev XState backend as a service",
+    description: "The CLI the StateBacked.dev XState backend as a service",
     license: "MIT",
     author: "Adam Berger <adam@statebacked.dev>",
     bin: "./script/mod.js",
@@ -30,7 +29,7 @@ await build({
     ],
     devDependencies: {
       "@types/node": "^16.11.0",
-    }, 
+    },
     keywords: [
       "statechart",
       "state machine",
