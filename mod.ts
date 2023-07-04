@@ -42,6 +42,11 @@ function main() {
     )
     .option("-t, --access-token <token>", "Access token")
     .option(
+      "-u, --api-url <url>",
+      "API URL (default: https://api.statebacked.dev)",
+      "https://api.statebacked.dev",
+    )
+    .option(
       "-o, --org <org>",
       "Organization ID (must be set if you have access to multiple orgs and have not set a default org via 'smply orgs default set <org-id>')",
     );
@@ -354,9 +359,7 @@ async function acceptInvitation(
   );
 
   const res = await fetch(
-    `https://api.statebacked.dev/invitations/${
-      encodeURIComponent(opts.invitation)
-    }`,
+    `${getApiURL(options)}/${encodeURIComponent(opts.invitation)}`,
     {
       method: "PUT",
       headers,
@@ -389,7 +392,7 @@ async function sendInvitation(
   const headers = await getHeaders(options);
 
   const res = await fetch(
-    "https://api.statebacked.dev/org-members",
+    `${getApiURL(options)}/org-members`,
     {
       method: "POST",
       headers,
@@ -414,7 +417,7 @@ async function launchBilling(
   const headers = await getHeaders(options);
 
   const res = await fetch(
-    "https://api.statebacked.dev/billing",
+    `${getApiURL(options)}/billing`,
     {
       method: "GET",
       headers,
@@ -618,7 +621,7 @@ async function createKey(
   const headers = await getHeaders(options);
 
   const createKeyResponse = await fetch(
-    `https://api.statebacked.dev/keys`,
+    `${getApiURL(options)}/keys`,
     {
       headers,
       method: "POST",
@@ -650,7 +653,7 @@ async function createMachine(
   const headers = await getHeaders(options);
 
   const machineCreationResponse = await fetch(
-    `https://api.statebacked.dev/machines`,
+    `${getApiURL(options)}/machines`,
     {
       headers,
       method: "POST",
@@ -729,7 +732,7 @@ async function createMachineVersion(
   const headers = await getHeaders(options);
 
   const versionCreationStep1Res = await fetch(
-    `https://api.statebacked.dev/machines/${opts.machine}/v`,
+    `${getApiURL(options)}/machines/${opts.machine}/v`,
     {
       headers,
       method: "POST",
@@ -772,7 +775,7 @@ async function createMachineVersion(
   }
 
   const versionCreationStep2Res = await fetch(
-    `https://api.statebacked.dev/machines/${opts.machine}/v/${machineVersionId}`,
+    `${getApiURL(options)}/machines/${opts.machine}/v/${machineVersionId}`,
     {
       headers,
       method: "PUT",
@@ -799,9 +802,10 @@ async function sendEventToMachineInstance(
     token: string;
     event: string;
   },
+  options: Command,
 ) {
   const eventResponse = await fetch(
-    `https://api.statebacked.dev/machines/${opts.machine}/i/${opts.instance}/events`,
+    `${getApiURL(options)}/machines/${opts.machine}/i/${opts.instance}/events`,
     {
       headers: {
         authorization: `Bearer ${opts.token}`,
@@ -830,9 +834,10 @@ async function createMachineInstance(
     context?: string;
     version?: string;
   },
+  options: Command,
 ) {
   const instanceCreationResponse = await fetch(
-    `https://api.statebacked.dev/machines/${opts.machine}`,
+    `${getApiURL(options)}/machines/${opts.machine}`,
     {
       headers: {
         authorization: `Bearer ${opts.token}`,
@@ -1264,4 +1269,8 @@ function getSupabaseClient(
       },
     },
   );
+}
+
+function getApiURL(options: Command) {
+  return options.optsWithGlobals().apiUrl ?? "https://api.statebacked.dev";
 }
