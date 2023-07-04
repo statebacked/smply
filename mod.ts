@@ -321,7 +321,7 @@ async function getEffectiveOrg(options: Command) {
 
   try {
     return await Deno.readTextFile(defaultOrgFile());
-  } catch (e) {
+  } catch (_) {
     return null;
   }
 }
@@ -408,7 +408,7 @@ async function sendInvitation(
 }
 
 async function launchBilling(
-  _: {},
+  _: unknown,
   options: Command,
 ) {
   const headers = await getHeaders(options);
@@ -896,17 +896,21 @@ async function getMachineInstance(
     throw error;
   }
 
+  const machineVersions = singleton(data.machine_versions);
+  const machineInstanceState = singleton(data.machine_instance_state);
+  const latestTransition = singleton(machineInstanceState?.machine_transitions);
+
   console.log({
-    machine_version_id: data.machine_versions.id,
-    machine_version_reference: data.machine_versions.client_info,
-    machine_name: data.machine_versions.machines.slug,
+    machine_version_id: machineVersions?.id,
+    machine_version_reference: machineVersions?.client_info,
+    machine_name: singleton(machineVersions?.machines)?.slug,
     created_at: data.created_at,
     name: data.extended_slug.split("/", 3)[2],
-    latest_transition: {
-      created_at: data.machine_instance_state?.machine_transitions.created_at,
-      state: data.machine_instance_state?.machine_transitions.state.value,
-      event: data.machine_instance_state?.machine_transitions.state.event.data,
-      context: data.machine_instance_state?.machine_transitions.state.context,
+    latest_transition: latestTransition && {
+      created_at: latestTransition.created_at,
+      state: latestTransition.state.value,
+      event: latestTransition.state.event.data,
+      context: latestTransition.state.context,
     },
   });
 }
@@ -946,20 +950,38 @@ async function listMachineInstances(
       throw error;
     }
 
-    return data.map((inst) => ({
-      name: inst.extended_slug.split("/", 3)[2],
-      created_at: inst.created_at,
-      latest_transition: {
-        created_at: inst.machine_instance_state?.machine_transitions.created_at,
-        state: inst.machine_instance_state?.machine_transitions.state.value,
-        event:
-          inst.machine_instance_state?.machine_transitions.state.event.data,
-      },
-      machine_version_id: inst.machine_versions.id,
-      machine_version_reference: inst.machine_versions.client_info,
-      machine_name: inst.machine_versions.machines?.slug,
-    }));
+    return data.map((inst) => {
+      const latestTransition = singleton(
+        singleton(inst.machine_instance_state)?.machine_transitions,
+      );
+      const machineVersion = singleton(inst.machine_versions);
+
+      return {
+        name: inst.extended_slug.split("/", 3)[2],
+        created_at: inst.created_at,
+        latest_transition: {
+          created_at: latestTransition?.created_at,
+          state: latestTransition?.state.value,
+          event: latestTransition?.state.event.data,
+        },
+        machine_version_id: machineVersion?.id,
+        machine_version_reference: machineVersion?.client_info,
+        machine_name: singleton(machineVersion?.machines)?.slug,
+      };
+    });
   });
+}
+
+function singleton<T>(
+  maybeArr: T | Array<T> | undefined | null,
+): T | undefined | null {
+  return typeof maybeArr === "undefined"
+    ? undefined
+    : maybeArr === null
+    ? null
+    : Array.isArray(maybeArr)
+    ? maybeArr[0]
+    : maybeArr;
 }
 
 async function getMachine(opts: { machine: string }, options: Command) {
@@ -982,14 +1004,18 @@ async function getMachine(opts: { machine: string }, options: Command) {
     throw error;
   }
 
+  const machineVersion = singleton(
+    singleton(data.current_machine_versions)?.machine_versions,
+  );
+
   console.log({
     name: data.slug,
     created_at: data.created_at,
     created_by: data.created_by,
-    current_version: data.current_machine_versions?.machine_versions && {
-      id: data.current_machine_versions.machine_versions.id,
-      created_at: data.current_machine_versions.machine_versions.created_at,
-      client_info: data.current_machine_versions.machine_versions.client_info,
+    current_version: machineVersion && {
+      id: machineVersion.id,
+      created_at: machineVersion.created_at,
+      client_info: machineVersion.client_info,
     },
   });
 }
@@ -1020,16 +1046,22 @@ async function listMachines(opts: PaginationOptions, options: Command) {
 
     return data.map((
       { slug, created_at, created_by, current_machine_versions },
-    ) => ({
-      name: slug,
-      created_at,
-      created_by,
-      current_version: current_machine_versions?.machine_versions && {
-        id: current_machine_versions.machine_versions.id,
-        created_at: current_machine_versions.machine_versions.created_at,
-        client_info: current_machine_versions.machine_versions.client_info,
-      },
-    }));
+    ) => {
+      const machineVersion = singleton(
+        singleton(current_machine_versions)?.machine_versions,
+      );
+
+      return {
+        name: slug,
+        created_at,
+        created_by,
+        current_version: machineVersion && {
+          id: machineVersion.id,
+          created_at: machineVersion.created_at,
+          client_info: machineVersion.client_info,
+        },
+      };
+    });
   });
 }
 
@@ -1059,7 +1091,7 @@ async function paginate<T>(
   }
 }
 
-async function whoami(_: any, options: Command) {
+async function whoami(_: unknown, options: Command) {
   const s = getSupabaseClient({ store: false });
   const { data, error } = await s.auth.getUser();
   if (error) {
