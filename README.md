@@ -18,6 +18,7 @@ $ # You can now launch instances of your toggler machine, send events, and read 
 
 **toggler.ts**
 ```javascript
+import { createMachine } from "xstate";
 import type { AllowRead, AllowWrite } from "@statebacked/machine-def";
 
 export allowRead: AllowRead = ({ machineInstanceName, authContext }) =>
