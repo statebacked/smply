@@ -585,11 +585,22 @@ async function deleteKey(
 ) {
   const s = await getLoggedInSupabaseClient(options);
 
-  const { error } = await s.from("keys").delete().eq("id", opts.key);
+  const key = opts.key.replace(/^sbk_/, "");
+
+  const { error, count } = await s.from("keys").delete({ count: "exact" }).eq(
+    "id",
+    key,
+  );
   if (error) {
     console.error("failed to delete key", error.message);
     throw error;
   }
+
+  if (count === 0) {
+    throw new Error("could not find key");
+  }
+
+  console.log("Successfully deleted key");
 }
 
 async function listKeys(
