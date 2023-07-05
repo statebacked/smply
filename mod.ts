@@ -1033,10 +1033,10 @@ async function listMachineInstances(
                   state
               )
           ),
-          machine_versions (
+          machine_versions:machine_version_id!inner (
             id,
             client_info,
-            machines (
+            machines:machine_id!inner (
               slug
             )
           )
@@ -1056,6 +1056,8 @@ async function listMachineInstances(
         singleton(inst.machine_instance_state)?.machine_transitions,
       );
       const machineVersion = singleton(inst.machine_versions);
+
+      console.log(machineVersion);
 
       return {
         name: inst.extended_slug.split("/", 3)[2],
