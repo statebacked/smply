@@ -1055,9 +1055,12 @@ async function listMachineInstances(
       const latestTransition = singleton(
         singleton(inst.machine_instance_state)?.machine_transitions,
       );
-      const machineVersion = singleton(inst.machine_versions);
-
-      console.log(machineVersion);
+      // supabase typing seems to get confused by inner joins
+      const machineVersion = singleton(inst.machine_versions) as {
+        id: string;
+        client_info: string;
+        machines: { slug: string };
+      } | undefined;
 
       return {
         name: inst.extended_slug.split("/", 3)[2],
