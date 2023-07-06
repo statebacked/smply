@@ -1249,7 +1249,18 @@ async function login(opts: { store: boolean }) {
     console.error("Failed to log in", sess.error.message);
     return;
   }
-  if (!shouldStore) {
+  if (shouldStore) {
+    try {
+      await Deno.remove(defaultOrgFile());
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) {
+        console.error(
+          `failed to remove default org file at '${defaultOrgFile()}'. remove manually to avoid errors.`,
+          e.message,
+        );
+      }
+    }
+  } else {
     console.log(sess?.data.session?.access_token);
   }
 }
