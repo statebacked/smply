@@ -1287,7 +1287,19 @@ async function verifyMagicLinkOrSignup(
     token: magicToken,
   });
 
-  if (!signupSess.error && !isOrgCreationPromptSuppressed()) {
+  const { count, error } = !signupSess.error
+    ? await s.from("orgs").select(undefined, { count: "exact" })
+    : { count: 0, error: null };
+
+  if (error) {
+    console.error("failed to determine org membership", error.message);
+    console.error(
+      "run `smply orgs list` to see your orgs or `smply orgs create` to create one",
+    );
+    return signupSess;
+  }
+
+  if (!signupSess.error && count === 0 && !isOrgCreationPromptSuppressed()) {
     await promptForOrgCreation(s);
   }
 
