@@ -1,4 +1,5 @@
 import { build, emptyDir } from "https://deno.land/x/dnt@0.37.0/mod.ts";
+import * as path from "https://deno.land/std@0.192.0/path/mod.ts";
 
 await emptyDir("./npm");
 
@@ -57,6 +58,13 @@ await build({
     await Promise.all([
       Deno.copyFile("LICENSE", "npm/LICENSE"),
       Deno.copyFile("README.md", "npm/README.md"),
+      addShebang(),
     ]);
   },
 });
+
+async function addShebang() {
+  const modPath = path.join("npm", "esm", "mod.js");
+  const mod = await Deno.readTextFile(modPath);
+  await Deno.writeTextFile(modPath, `#!/usr/bin/env node\n\n${mod}`);
+}
