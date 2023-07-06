@@ -12,7 +12,7 @@ get started with your own XState backend as a service.
 ```bash
 $ npm install -g smply
 $ npx esbuild --bundle --format=esm --outfile=./toggler.js ./toggler.ts
-$ smply machines create --machine toggler --file ./toggler.js
+$ smply machines create --machine toggler --node ./toggler.js
 $ # You can now launch instances of your toggler machine, send events, and read state!
 ```
 

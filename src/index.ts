@@ -124,15 +124,11 @@ function main() {
     )
     .option(
       "-f, --file <file>",
-      "Path to the single javascript file that exports the machine definition. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
-    )
-    .option(
-      "-d, --deno <file>",
-      "Path to the Deno entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the single javascript file that exports the machine definition. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .option(
       "-n, --node <file>",
-      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .action(createMachine);
 
@@ -150,15 +146,11 @@ function main() {
     )
     .option(
       "-f, --file <file>",
-      "Path to the single javascript file that exports the machine definition. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
-    )
-    .option(
-      "-d, --deno <file>",
-      "Path to the Deno entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the single javascript file that exports the machine definition. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .option(
       "-n, --node <file>",
-      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If none of --file, --deno, or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .option(
       "-c, --make-current",
@@ -474,7 +466,6 @@ async function launchBilling(_: unknown, options: Command) {
     );
   }
 
-  // deno-lint-ignore no-explicit-any
   const { url } = (await res.json()) as any;
   console.log(url);
 }
@@ -691,7 +682,6 @@ async function createKey(
     );
   }
 
-  // deno-lint-ignore no-explicit-any
   const { id, key } = (await createKeyResponse.json()) as any;
   console.log(
     "Store this key safely now. You can create additional keys in the future but this key will never be shown again!",
@@ -801,7 +791,7 @@ async function createMachineVersion(
 
   if (count !== 1) {
     throw new InvalidArgumentError(
-      "Exactly one of --file, --node or --deno must be specified",
+      "Exactly one of --file or --node must be specified",
     );
   }
 
@@ -818,7 +808,7 @@ async function createMachineVersion(
 
   if (!code) {
     throw new InvalidArgumentError(
-      "Exactly one of --file, --node or --deno must be specified",
+      "Exactly one of --file or --node must be specified",
     );
   }
 
@@ -841,7 +831,6 @@ async function createMachineVersion(
   }
 
   const { machineVersionId, codeUploadUrl, codeUploadFields } =
-    // deno-lint-ignore no-explicit-any
     (await versionCreationStep1Res.json()) as any;
 
   const uploadForm = new FormData();
@@ -1042,11 +1031,8 @@ async function getMachineInstance(
     name: data.extended_slug.split("/", 3)[2],
     latest_transition: latestTransition && {
       created_at: latestTransition.created_at,
-      // deno-lint-ignore no-explicit-any
       state: (latestTransition.state as any)?.value,
-      // deno-lint-ignore no-explicit-any
       event: (latestTransition.state as any)?.event.data,
-      // deno-lint-ignore no-explicit-any
       context: (latestTransition.state as any)?.context,
     },
   });
@@ -1106,9 +1092,7 @@ async function listMachineInstances(
         created_at: inst.created_at,
         latest_transition: {
           created_at: latestTransition?.created_at,
-          // deno-lint-ignore no-explicit-any
           state: (latestTransition?.state as any)?.value,
-          // deno-lint-ignore no-explicit-any
           event: (latestTransition?.state as any)?.event.data,
         },
         machine_version_id: machineVersion?.id,
