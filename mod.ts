@@ -468,7 +468,7 @@ async function getDefaultOrg() {
     const org = await Deno.readTextFile(defaultOrgFile());
     console.log(org);
   } catch (e) {
-    if (e instanceof Deno.errors.NotFound) {
+    if (e instanceof Deno.errors.NotFound || e?.code === "ENOENT") {
       console.log("No default organization set.");
       return;
     }
@@ -1249,20 +1249,44 @@ async function login(opts: { store: boolean }) {
     console.error("Failed to log in", sess.error.message);
     return;
   }
+
   if (shouldStore) {
     try {
       await Deno.remove(defaultOrgFile());
     } catch (e) {
-      if (!(e instanceof Deno.errors.NotFound)) {
+      if (!(e instanceof Deno.errors.NotFound || e.code === "ENOENT")) {
         console.error(
           `failed to remove default org file at '${defaultOrgFile()}'. remove manually to avoid errors.`,
           e.message,
         );
       }
     }
-  } else {
+  }
+
+  if (!isOrgCreationPromptSuppressed()) {
+    await createOrgIfNecessary(s);
+  }
+  
+  if (!shouldStore) {
     console.log(sess?.data.session?.access_token);
   }
+}
+
+async function createOrgIfNecessary(s: SupabaseClient) {
+  const { count, error } = await s.from("orgs").select(undefined, { count: "exact" });
+
+  if (error) {
+    console.error("failed to determine org membership", error.message);
+    console.error(
+      "run `smply orgs list` to see your orgs or `smply orgs create` to create one",
+    );
+    return;
+  }
+
+  if (count === 0) {
+    await promptForOrgCreation(s);
+  }
+
 }
 
 async function verifyMagicLinkOrSignup(
@@ -1286,22 +1310,6 @@ async function verifyMagicLinkOrSignup(
     email,
     token: magicToken,
   });
-
-  const { count, error } = !signupSess.error
-    ? await s.from("orgs").select(undefined, { count: "exact" })
-    : { count: 0, error: null };
-
-  if (error) {
-    console.error("failed to determine org membership", error.message);
-    console.error(
-      "run `smply orgs list` to see your orgs or `smply orgs create` to create one",
-    );
-    return signupSess;
-  }
-
-  if (!signupSess.error && count === 0 && !isOrgCreationPromptSuppressed()) {
-    await promptForOrgCreation(s);
-  }
 
   return signupSess;
 }
@@ -1380,7 +1388,7 @@ function getSupabaseClient(
                 const item = await Deno.readTextFile(tokenFile);
                 return item;
               } catch (e) {
-                if (e instanceof Deno.errors.NotFound) {
+                if (e instanceof Deno.errors.NotFound || e.code === "ENOENT") {
                   return null;
                 }
                 throw e;
