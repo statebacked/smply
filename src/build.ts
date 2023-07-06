@@ -1,9 +1,12 @@
-import * as esbuild from "https://deno.land/x/esbuild@v0.18.11/mod.js";
-import { denoPlugins } from "https://deno.land/x/esbuild_deno_loader@0.8.1/mod.ts";
-import * as path from "https://deno.land/std@0.192.0/path/mod.ts";
+import * as esbuild from "esbuild";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
+import { denoPlugin } from "@gjsify/esbuild-plugin-deno-loader";
 
 export async function build(inputFile: string, inputType: "node" | "deno") {
-  const outFile = await Deno.makeTempFile();
+  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "smply-"));
+  const outFile = path.join(outDir, "machine.js");
   try {
     const res = await esbuild.build({
       entryPoints: [inputFile],
@@ -11,11 +14,10 @@ export async function build(inputFile: string, inputType: "node" | "deno") {
       outfile: outFile,
       platform: "browser",
       format: "esm",
-      plugins: inputType === "deno" ? denoPlugins({ loader: "native" }) : [],
+      plugins: inputType === "deno" ? [denoPlugin()] : [],
     });
 
-    const code = await Deno.readFile(outFile);
-    await Deno.remove(outFile);
+    const code = await fs.readFile(outFile, { encoding: "utf8" });
 
     if (res.errors && res.errors.length > 0) {
       console.error(res.errors);
@@ -31,6 +33,6 @@ export async function build(inputFile: string, inputType: "node" | "deno") {
       fileName: path.basename(inputFile),
     };
   } finally {
-    esbuild.stop();
+    await fs.rm(outDir, { recursive: true, force: true });
   }
 }

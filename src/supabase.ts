@@ -119,8 +119,7 @@ export interface Database {
         };
         Relationships: [
           {
-            foreignKeyName:
-              "machine_instance_state_latest_machine_transition_id_fkey";
+            foreignKeyName: "machine_instance_state_latest_machine_transition_id_fkey";
             columns: ["latest_machine_transition_id"];
             referencedRelation: "machine_transitions";
             referencedColumns: ["id"];

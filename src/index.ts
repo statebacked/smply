@@ -1,12 +1,21 @@
-import { Command, InvalidArgumentError } from "npm:commander@11.0.0";
+#!/usr/bin/env node
+
+import { Command, InvalidArgumentError } from "commander";
 import {
   createClient,
   SupabaseClient as RawSupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.26.0";
-import * as path from "https://deno.land/std@0.192.0/path/mod.ts";
-import { signToken } from "https://deno.land/x/statebacked_token@v0.2.0/mod.ts";
-import { Database } from "./supabase.ts";
-import { build } from "./src/build.ts";
+} from "@supabase/supabase-js";
+import * as path from "node:path";
+import * as fs from "node:fs/promises";
+import * as readline from "node:readline";
+import fetch, { FormData, Blob } from 'node-fetch';
+import { signToken } from "@statebacked/token";
+import { Database } from "./supabase.js";
+import { build } from "./build.js";
+
+globalThis.fetch = fetch as any;
+globalThis.FormData = FormData as any;
+globalThis.Blob = Blob as any;
 
 type SupabaseClient = RawSupabaseClient<Database>;
 
@@ -31,7 +40,8 @@ main();
 
 function main() {
   const program = new Command("smply");
-  program.name("smply")
+  program
+    .name("smply")
     .showSuggestionAfterError()
     .configureHelp({
       showGlobalOptions: true,
@@ -55,7 +65,8 @@ function main() {
       "Organization ID (must be set if you have access to multiple orgs and have not set a default org via 'smply orgs default set <org-id>')",
     );
 
-  program.command("login")
+  program
+    .command("login")
     .description(
       "Log in to State Backed and store a token in ~/.smply/credentials.",
     )
@@ -65,28 +76,32 @@ function main() {
     )
     .action(login);
 
-  program.command("whoami")
+  program
+    .command("whoami")
     .description("Print the current user")
     .action(whoami);
 
-  program.command("billing")
+  program
+    .command("billing")
     .description("Manage billing")
     .action(launchBilling);
 
-  const machines = program.command("machines")
+  const machines = program
+    .command("machines")
     .description("Manage state machine definitions");
 
   withPaginationOptions(
     machines.command("list").description("List machine definitions"),
-  )
-    .action(listMachines);
+  ).action(listMachines);
 
-  machines.command("get")
+  machines
+    .command("get")
     .description("Get a machine definition")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(getMachine);
 
-  machines.command("create")
+  machines
+    .command("create")
     .description(
       "Create a new machine definition. If a file is specified, the machine will be created with a version. Otherwise, a version must be added before instances of the machine can be launched.",
     )
@@ -121,10 +136,12 @@ function main() {
     )
     .action(createMachine);
 
-  const machineVersions = program.command("machine-versions")
+  const machineVersions = program
+    .command("machine-versions")
     .description("Manage machine definition versions");
 
-  machineVersions.command("create")
+  machineVersions
+    .command("create")
     .description("Create a new version of a machine definition")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption(
@@ -155,7 +172,8 @@ function main() {
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(listMachineVersions);
 
-  const instances = program.command("instances")
+  const instances = program
+    .command("instances")
     .description("Manage state machine instances");
 
   withPaginationOptions(
@@ -164,13 +182,15 @@ function main() {
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(listMachineInstances);
 
-  instances.command("get")
+  instances
+    .command("get")
     .description("Get a machine instance")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption("-i, --instance <instance>", "Instance name (required)")
     .action(getMachineInstance);
 
-  instances.command("create")
+  instances
+    .command("create")
     .description("Create a new machine instance")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption(
@@ -192,7 +212,8 @@ function main() {
     )
     .action(createMachineInstance);
 
-  instances.command("send-event")
+  instances
+    .command("send-event")
     .description("Send an event to a machine instance")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption("-i, --instance <instance>", "Instance name (required)")
@@ -210,37 +231,37 @@ function main() {
     )
     .action(sendEventToMachineInstance);
 
-  const orgs = program.command("orgs")
-    .description("Manage organizations");
+  const orgs = program.command("orgs").description("Manage organizations");
 
   withPaginationOptions(
-    orgs.command("list")
-      .description("List organizations"),
-  )
-    .action(listOrgs);
+    orgs.command("list").description("List organizations"),
+  ).action(listOrgs);
 
-  orgs.command("create")
+  orgs
+    .command("create")
     .description("Create a new organization")
     .requiredOption("-n, --name <name>", "Organization name (required)")
     .action(createOrg);
 
-  const defaultOrg = orgs.command("default").description(
-    "Default organization. Stored in ~/.smply/default-org.",
-  );
+  const defaultOrg = orgs
+    .command("default")
+    .description("Default organization. Stored in ~/.smply/default-org.");
 
-  defaultOrg.command("set")
+  defaultOrg
+    .command("set")
     .description("Set the default organization")
     .option("-o, --org <org>", "Organization ID (required)")
     .action(setDefaultOrg);
 
-  defaultOrg.command("get")
+  defaultOrg
+    .command("get")
     .description("Get the default organization.")
     .action(getDefaultOrg);
 
-  const keys = program.command("keys")
-    .description("Manage API keys");
+  const keys = program.command("keys").description("Manage API keys");
 
-  keys.command("create")
+  keys
+    .command("create")
     .description("Create a new API key")
     .option(
       "-u, --use [use]",
@@ -249,28 +270,29 @@ function main() {
     )
     .option(
       "-s, --scopes [scopes...]",
-      `Comma-separated list of scopes to add to the key. If not specified, the default scopes for the use will be added. Valid scopes are: ${
-        allowedScopes.map((s) => `'${s}'`).join(", ")
-      }`,
+      `Comma-separated list of scopes to add to the key. If not specified, the default scopes for the use will be added. Valid scopes are: ${allowedScopes
+        .map((s) => `'${s}'`)
+        .join(", ")}`,
     )
     .requiredOption("-n, --name <name>", "Name for the key")
     .action(createKey);
 
   withPaginationOptions(
-    keys.command("list")
-      .description("List API keys"),
-  )
-    .action(listKeys);
+    keys.command("list").description("List API keys"),
+  ).action(listKeys);
 
-  keys.command("delete")
+  keys
+    .command("delete")
     .description("Delete an API key")
     .requiredOption("-k, --key <key>", "Key ID (required)")
     .action(deleteKey);
 
-  const tokens = program.command("tokens")
+  const tokens = program
+    .command("tokens")
     .description("Utilities to generate tokens");
 
-  tokens.command("generate")
+  tokens
+    .command("generate")
     .description("Generate a token")
     .requiredOption(
       "-k, --key <key>",
@@ -286,10 +308,12 @@ function main() {
     )
     .action(generateToken);
 
-  const invitations = program.command("invitations")
+  const invitations = program
+    .command("invitations")
     .description("Manage organization invitations");
 
-  invitations.command("send")
+  invitations
+    .command("send")
     .description("Send an invitation to an organization")
     .option("-o, --org <org>", "Organization ID (required)")
     .requiredOption(
@@ -303,7 +327,8 @@ function main() {
     )
     .action(sendInvitation);
 
-  invitations.command("accept")
+  invitations
+    .command("accept")
     .description("Accept an invitation to an organization")
     .requiredOption(
       "-i, --invitation <invitation>",
@@ -311,7 +336,7 @@ function main() {
     )
     .action(acceptInvitation);
 
-  const _args = program.parse(Deno.args, { from: "user" });
+  const _args = program.parse();
 }
 
 function withPaginationOptions(cmd: Command) {
@@ -353,7 +378,7 @@ async function getEffectiveOrg(options: Command) {
   }
 
   try {
-    return await Deno.readTextFile(defaultOrgFile());
+    return await fs.readFile(defaultOrgFile(), { encoding: "utf8" });
   } catch (_) {
     return null;
   }
@@ -383,7 +408,7 @@ async function acceptInvitation(
   options: Command,
 ) {
   const headers = await whileSuppressingOrgCreationPrompt(() =>
-    getHeaders(options)
+    getHeaders(options),
   );
 
   const res = await fetch(
@@ -419,17 +444,14 @@ async function sendInvitation(
 
   const headers = await getHeaders(options);
 
-  const res = await fetch(
-    `${getApiURL(options)}/org-members`,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        email: opts.email,
-        role: opts.role,
-      }),
-    },
-  );
+  const res = await fetch(`${getApiURL(options)}/org-members`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      email: opts.email,
+      role: opts.role,
+    }),
+  });
 
   if (!res.ok) {
     throw new Error(`failed to send invitation: ${await res.text()}`);
@@ -438,19 +460,13 @@ async function sendInvitation(
   console.log("Invitation sent.");
 }
 
-async function launchBilling(
-  _: unknown,
-  options: Command,
-) {
+async function launchBilling(_: unknown, options: Command) {
   const headers = await getHeaders(options);
 
-  const res = await fetch(
-    `${getApiURL(options)}/billing`,
-    {
-      method: "GET",
-      headers,
-    },
-  );
+  const res = await fetch(`${getApiURL(options)}/billing`, {
+    method: "GET",
+    headers,
+  });
 
   if (!res.ok) {
     throw new Error(
@@ -459,16 +475,16 @@ async function launchBilling(
   }
 
   // deno-lint-ignore no-explicit-any
-  const { url } = await res.json() as any;
+  const { url } = (await res.json()) as any;
   console.log(url);
 }
 
 async function getDefaultOrg() {
   try {
-    const org = await Deno.readTextFile(defaultOrgFile());
+    const org = await fs.readFile(defaultOrgFile(), { encoding: "utf8" });
     console.log(org);
   } catch (e) {
-    if (e instanceof Deno.errors.NotFound || e?.code === "ENOENT") {
+    if (e?.code === "ENOENT") {
       console.log("No default organization set.");
       return;
     }
@@ -477,22 +493,16 @@ async function getDefaultOrg() {
   }
 }
 
-async function setDefaultOrg(
-  _: { org: string },
-  options: Command,
-) {
+async function setDefaultOrg(_: { org: string }, options: Command) {
   const opts = options.optsWithGlobals();
   if (!opts.org) {
     throw new InvalidArgumentError("-o or --org is required");
   }
 
-  await Deno.writeTextFile(
-    defaultOrgFile(),
-    opts.org,
-    {
-      mode: 0o600,
-    },
-  );
+  await fs.writeFile(defaultOrgFile(), opts.org, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
 
   console.log("Successfully set default org");
 }
@@ -503,14 +513,14 @@ function getSortOpts(opts: PaginationOptions) {
   };
 }
 
-async function listOrgs(
-  opts: PaginationOptions,
-  options: Command,
-) {
+async function listOrgs(opts: PaginationOptions, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
 
   await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s.from("orgs").select(`
+    const { data, error } = await s
+      .from("orgs")
+      .select(
+        `
       id,
       created_at,
       name,
@@ -518,7 +528,10 @@ async function listOrgs(
         monthly_events_limit,
         monthly_reads_limit
       )
-    `).order("created_at", getSortOpts(opts)).range(from, to);
+    `,
+      )
+      .order("created_at", getSortOpts(opts))
+      .range(from, to);
     if (error) {
       console.error(error.message);
       throw error;
@@ -528,10 +541,7 @@ async function listOrgs(
   });
 }
 
-async function createOrg(
-  opts: { name: string },
-  options: Command,
-) {
+async function createOrg(opts: { name: string }, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
   const orgId = await doCreateOrg(s, opts.name);
   console.log({
@@ -549,11 +559,13 @@ async function doCreateOrg(s: SupabaseClient, orgName: string) {
     throw error;
   }
 
-  const { data, error: err } = await s.from("orgs").select("id").filter(
-    "name",
-    "eq",
-    orgName,
-  ).order("created_at", { ascending: false }).limit(1).single();
+  const { data, error: err } = await s
+    .from("orgs")
+    .select("id")
+    .filter("name", "eq", orgName)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
   if (err) {
     console.error(err.message);
     throw err;
@@ -562,9 +574,11 @@ async function doCreateOrg(s: SupabaseClient, orgName: string) {
   return data.id;
 }
 
-async function generateToken(
-  opts: { key: string; secret: string; claims: string },
-) {
+async function generateToken(opts: {
+  key: string;
+  secret: string;
+  claims: string;
+}) {
   const jwt = await signToken(
     { stateBackedKeyId: opts.key, stateBackedSecretKey: opts.secret },
     JSON.parse(opts.claims),
@@ -579,18 +593,15 @@ async function generateToken(
   console.log(jwt);
 }
 
-async function deleteKey(
-  opts: { key: string },
-  options: Command,
-) {
+async function deleteKey(opts: { key: string }, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
 
   const key = opts.key.replace(/^sbk_/, "");
 
-  const { error, count } = await s.from("keys").delete({ count: "exact" }).eq(
-    "id",
-    key,
-  );
+  const { error, count } = await s
+    .from("keys")
+    .delete({ count: "exact" })
+    .eq("id", key);
   if (error) {
     console.error("failed to delete key", error.message);
     throw error;
@@ -603,20 +614,23 @@ async function deleteKey(
   console.log("Successfully deleted key");
 }
 
-async function listKeys(
-  opts: PaginationOptions,
-  options: Command,
-) {
+async function listKeys(opts: PaginationOptions, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
 
   await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s.from("keys").select(`
+    const { data, error } = await s
+      .from("keys")
+      .select(
+        `
       id,
       created_at,
       name,
       created_by,
       scope
-    `).order("created_at", getSortOpts(opts)).range(from, to);
+    `,
+      )
+      .order("created_at", getSortOpts(opts))
+      .range(from, to);
     if (error) {
       console.error(error.message);
       throw error;
@@ -650,9 +664,9 @@ async function createKey(
     for (const scope of opts.scopes) {
       if (!allowedScopes.includes(scope)) {
         throw new InvalidArgumentError(
-          `invalid scope '${scope}'. Valid scopes are: ${
-            allowedScopes.join(", ")
-          }`,
+          `invalid scope '${scope}'. Valid scopes are: ${allowedScopes.join(
+            ", ",
+          )}`,
         );
       }
     }
@@ -660,27 +674,25 @@ async function createKey(
 
   const headers = await getHeaders(options);
 
-  const createKeyResponse = await fetch(
-    `${getApiURL(options)}/keys`,
-    {
-      headers,
-      method: "POST",
-      body: JSON.stringify({
-        name: opts.name,
-        use: !opts.scopes || opts.scopes.length === 0 ? opts.use : undefined,
-        scopes: opts.scopes,
-      }),
-    },
-  );
+  const createKeyResponse = await fetch(`${getApiURL(options)}/keys`, {
+    headers,
+    method: "POST",
+    body: JSON.stringify({
+      name: opts.name,
+      use: !opts.scopes || opts.scopes.length === 0 ? opts.use : undefined,
+      scopes: opts.scopes,
+    }),
+  });
   if (!createKeyResponse.ok) {
     throw new Error(
-      `failed to create key (${createKeyResponse.status}): ${await createKeyResponse
-        .text()}`,
+      `failed to create key (${
+        createKeyResponse.status
+      }): ${await createKeyResponse.text()}`,
     );
   }
 
   // deno-lint-ignore no-explicit-any
-  const { id, key } = await createKeyResponse.json() as any;
+  const { id, key } = (await createKeyResponse.json()) as any;
   console.log(
     "Store this key safely now. You can create additional keys in the future but this key will never be shown again!",
   );
@@ -711,8 +723,9 @@ async function createMachine(
   );
   if (!machineCreationResponse.ok) {
     throw new Error(
-      `failed to create machine (${machineCreationResponse.status}): ${await machineCreationResponse
-        .text()}`,
+      `failed to create machine (${
+        machineCreationResponse.status
+      }): ${await machineCreationResponse.text()}`,
     );
   }
 
@@ -742,30 +755,34 @@ async function listMachineVersions(
   const s = await getLoggedInSupabaseClient(options);
 
   await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s.from("machine_versions").select(`
+    const { data, error } = await s
+      .from("machine_versions")
+      .select(
+        `
         id,
         client_info,
         created_at,
         machines:machine_id!inner ( slug ),
         current_machine_versions ( machine_id )
-    `).filter("machines.slug", "eq", opts.machine).order(
-      "created_at",
-      getSortOpts(opts),
-    ).range(from, to);
+    `,
+      )
+      .filter("machines.slug", "eq", opts.machine)
+      .order("created_at", getSortOpts(opts))
+      .range(from, to);
     if (error) {
       console.error(error.message);
       throw error;
     }
 
-    return data.map((
-      { id, client_info, created_at, current_machine_versions },
-    ) => ({
-      id,
-      client_info,
-      created_at,
-      is_current: current_machine_versions &&
-        current_machine_versions.length > 0,
-    }));
+    return data.map(
+      ({ id, client_info, created_at, current_machine_versions }) => ({
+        id,
+        client_info,
+        created_at,
+        is_current:
+          current_machine_versions && current_machine_versions.length > 0,
+      }),
+    );
   });
 }
 
@@ -790,9 +807,9 @@ async function createMachineVersion(
 
   const code = opts.file
     ? {
-      fileName: path.basename(opts.file),
-      code: await Deno.readFile(opts.file),
-    }
+        fileName: path.basename(opts.file),
+        code: await fs.readFile(opts.file, { encoding: "utf8" }),
+      }
     : opts.deno
     ? await build(opts.deno, "deno")
     : opts.node
@@ -817,14 +834,15 @@ async function createMachineVersion(
   );
   if (!versionCreationStep1Res.ok) {
     throw new Error(
-      `failed to create version (${versionCreationStep1Res.status}): ${await versionCreationStep1Res
-        .text()}`,
+      `failed to create version (${
+        versionCreationStep1Res.status
+      }): ${await versionCreationStep1Res.text()}`,
     );
   }
 
   const { machineVersionId, codeUploadUrl, codeUploadFields } =
     // deno-lint-ignore no-explicit-any
-    await versionCreationStep1Res.json() as any;
+    (await versionCreationStep1Res.json()) as any;
 
   const uploadForm = new FormData();
   for (const [key, value] of Object.entries(codeUploadFields)) {
@@ -839,17 +857,15 @@ async function createMachineVersion(
     code.fileName,
   );
 
-  const uploadRes = await fetch(
-    codeUploadUrl,
-    {
-      method: "POST",
-      body: uploadForm,
-    },
-  );
+  const uploadRes = await fetch(codeUploadUrl, {
+    method: "POST",
+    body: uploadForm,
+  });
   if (!uploadRes.ok) {
     throw new Error(
-      `failed to upload code for version (${uploadRes.status}): ${await uploadRes
-        .text()}`,
+      `failed to upload code for version (${
+        uploadRes.status
+      }): ${await uploadRes.text()}`,
     );
   }
 
@@ -867,8 +883,9 @@ async function createMachineVersion(
 
   if (!versionCreationStep2Res.ok) {
     throw new Error(
-      `failed to create version (${versionCreationStep2Res.status}): ${await versionCreationStep2Res
-        .text()}`,
+      `failed to create version (${
+        versionCreationStep2Res.status
+      }): ${await versionCreationStep2Res.text()}`,
     );
   }
 
@@ -886,7 +903,8 @@ async function sendEventToMachineInstance(
   options: Command,
 ) {
   if (
-    (!opts.token && !opts.authContext) || (!!opts.token && !!opts.authContext)
+    (!opts.token && !opts.authContext) ||
+    (!!opts.token && !!opts.authContext)
   ) {
     throw new InvalidArgumentError(
       "One of --token or --auth-context is required",
@@ -909,8 +927,9 @@ async function sendEventToMachineInstance(
   );
   if (!eventResponse.ok) {
     throw new Error(
-      `failed to send event (${eventResponse.status}): ${await eventResponse
-        .text()}`,
+      `failed to send event (${
+        eventResponse.status
+      }): ${await eventResponse.text()}`,
     );
   }
 
@@ -929,7 +948,8 @@ async function createMachineInstance(
   options: Command,
 ) {
   if (
-    (!opts.token && !opts.authContext) || (!!opts.token && !!opts.authContext)
+    (!opts.token && !opts.authContext) ||
+    (!!opts.token && !!opts.authContext)
   ) {
     throw new InvalidArgumentError(
       "One of --token or --auth-context is required",
@@ -954,8 +974,9 @@ async function createMachineInstance(
   );
   if (!instanceCreationResponse.ok) {
     throw new Error(
-      `failed to create instance (${instanceCreationResponse.status}): ${await instanceCreationResponse
-        .text()}`,
+      `failed to create instance (${
+        instanceCreationResponse.status
+      }): ${await instanceCreationResponse.text()}`,
     );
   }
 
@@ -968,7 +989,8 @@ async function getMachineInstance(
 ) {
   const s = await getLoggedInSupabaseClient(options);
 
-  const { data: machineData, error: machineError } = await s.from("machines")
+  const { data: machineData, error: machineError } = await s
+    .from("machines")
     .select(`id, org_id`)
     .filter("slug", "eq", opts.machine)
     .single();
@@ -980,8 +1002,10 @@ async function getMachineInstance(
 
   const { id: machineId, org_id: orgId } = machineData;
 
-  const { data, error } = await s.from("machine_instances")
-    .select(`
+  const { data, error } = await s
+    .from("machine_instances")
+    .select(
+      `
         machine_versions (
             id,
             client_info,
@@ -997,7 +1021,8 @@ async function getMachineInstance(
                 state
             )
         )
-    `)
+    `,
+    )
     .filter("extended_slug", "eq", `${orgId}/${machineId}/${opts.instance}`)
     .single();
   if (error) {
@@ -1034,8 +1059,10 @@ async function listMachineInstances(
   const s = await getLoggedInSupabaseClient(options);
 
   await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s.from("machine_instances")
-      .select(`
+    const { data, error } = await s
+      .from("machine_instances")
+      .select(
+        `
           extended_slug,
           created_at,
           machine_instance_state (
@@ -1051,12 +1078,11 @@ async function listMachineInstances(
               slug
             )
           )
-        `)
+        `,
+      )
       .filter("machine_versions.machines.slug", "eq", opts.machine)
-      .order(
-        "created_at",
-        getSortOpts(opts),
-      ).range(from, to);
+      .order("created_at", getSortOpts(opts))
+      .range(from, to);
     if (error) {
       console.error(error.message);
       throw error;
@@ -1067,11 +1093,13 @@ async function listMachineInstances(
         singleton(inst.machine_instance_state)?.machine_transitions,
       );
       // supabase typing seems to get confused by inner joins
-      const machineVersion = singleton(inst.machine_versions) as {
-        id: string;
-        client_info: string;
-        machines: { slug: string };
-      } | undefined;
+      const machineVersion = singleton(inst.machine_versions as any) as
+        | {
+            id: string;
+            client_info: string;
+            machines: { slug: string };
+          }
+        | undefined;
 
       return {
         name: inst.extended_slug.split("/", 3)[2],
@@ -1106,7 +1134,10 @@ function singleton<T>(
 async function getMachine(opts: { machine: string }, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
 
-  const { data, error } = await s.from("machines").select(`
+  const { data, error } = await s
+    .from("machines")
+    .select(
+      `
         slug,
         created_at,
         created_by,
@@ -1117,7 +1148,10 @@ async function getMachine(opts: { machine: string }, options: Command) {
                 created_at
             )
         )
-    `).filter("slug", "eq", opts.machine).single();
+    `,
+    )
+    .filter("slug", "eq", opts.machine)
+    .single();
   if (error) {
     console.error(error.message);
     throw error;
@@ -1143,7 +1177,10 @@ async function listMachines(opts: PaginationOptions, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
 
   await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s.from("machines").select(`
+    const { data, error } = await s
+      .from("machines")
+      .select(
+        `
         slug,
         created_at,
         created_by,
@@ -1154,33 +1191,33 @@ async function listMachines(opts: PaginationOptions, options: Command) {
                 created_at
             )
         )
-    `).order(
-      "created_at",
-      getSortOpts(opts),
-    ).range(from, to);
+    `,
+      )
+      .order("created_at", getSortOpts(opts))
+      .range(from, to);
     if (error) {
       console.error(error.message);
       throw error;
     }
 
-    return data.map((
-      { slug, created_at, created_by, current_machine_versions },
-    ) => {
-      const machineVersion = singleton(
-        singleton(current_machine_versions)?.machine_versions,
-      );
+    return data.map(
+      ({ slug, created_at, created_by, current_machine_versions }) => {
+        const machineVersion = singleton(
+          singleton(current_machine_versions)?.machine_versions,
+        );
 
-      return {
-        name: slug,
-        created_at,
-        created_by,
-        current_version: machineVersion && {
-          id: machineVersion.id,
-          created_at: machineVersion.created_at,
-          client_info: machineVersion.client_info,
-        },
-      };
-    });
+        return {
+          name: slug,
+          created_at,
+          created_by,
+          current_version: machineVersion && {
+            id: machineVersion.id,
+            created_at: machineVersion.created_at,
+            client_info: machineVersion.client_info,
+          },
+        };
+      },
+    );
   });
 }
 
@@ -1191,7 +1228,7 @@ async function paginate<T>(
   const pageSize = opts.count ? parseInt(opts.count, 10) : 20;
   let from = opts.offset ? parseInt(opts.offset, 10) : 0;
   let to = pageSize - 1;
-  const shouldPaginate = Deno.isatty(Deno.stdout.rid);
+  const shouldPaginate = process.stdout.isTTY;
   let more = true;
   while (more) {
     const page = await getItems({ from, to });
@@ -1210,12 +1247,26 @@ async function paginate<T>(
   }
 }
 
+async function prompt(q: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(q + " ", res => {
+      rl.close();
+      resolve(res);
+    });
+  });
+}
+
 async function whoami(_: unknown, options: Command) {
   const s = getSupabaseClient({ store: false });
   const { data, error } = await s.auth.getUser();
   if (error) {
     console.error(error.message);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log({
     email: data.user.email,
@@ -1227,22 +1278,22 @@ async function whoami(_: unknown, options: Command) {
 async function login(opts: { store: boolean }) {
   const shouldStore = opts.store;
   const s = getSupabaseClient({ store: shouldStore });
-  const email = prompt("What is your email address?");
+  const email = await prompt("What is your email address?");
   if (!email) {
     console.error("No email provided");
-    Deno.exit(1);
+    process.exit(1);
   }
-  const a = await s.auth.signInWithOtp({ email });
-  if (a.error) {
-    console.error("Failed to send verification code", a.error.message);
-    Deno.exit(1);
+  const signIn = await s.auth.signInWithOtp({ email });
+  if (signIn.error) {
+    console.error("Failed to send verification code", signIn.error.message);
+    process.exit(1);
   }
-  const magicToken = prompt(
+  const magicToken = await prompt(
     "Check your email and paste the verification code here:",
   );
   if (!magicToken) {
     console.error("No token provided");
-    Deno.exit(1);
+    process.exit(1);
   }
   const sess = await verifyMagicLinkOrSignup(s, email, magicToken);
   if (sess.error) {
@@ -1252,9 +1303,9 @@ async function login(opts: { store: boolean }) {
 
   if (shouldStore) {
     try {
-      await Deno.remove(defaultOrgFile());
+      await fs.unlink(defaultOrgFile());
     } catch (e) {
-      if (!(e instanceof Deno.errors.NotFound || e.code === "ENOENT")) {
+      if (e.code !== "ENOENT") {
         console.error(
           `failed to remove default org file at '${defaultOrgFile()}'. remove manually to avoid errors.`,
           e.message,
@@ -1266,14 +1317,16 @@ async function login(opts: { store: boolean }) {
   if (!isOrgCreationPromptSuppressed()) {
     await createOrgIfNecessary(s);
   }
-  
+
   if (!shouldStore) {
     console.log(sess?.data.session?.access_token);
   }
 }
 
 async function createOrgIfNecessary(s: SupabaseClient) {
-  const { count, error } = await s.from("orgs").select(undefined, { count: "exact" });
+  const { count, error } = await s
+    .from("orgs")
+    .select(undefined, { count: "exact" });
 
   if (error) {
     console.error("failed to determine org membership", error.message);
@@ -1286,7 +1339,6 @@ async function createOrgIfNecessary(s: SupabaseClient) {
   if (count === 0) {
     await promptForOrgCreation(s);
   }
-
 }
 
 async function verifyMagicLinkOrSignup(
@@ -1333,9 +1385,7 @@ async function promptForOrgCreation(s: SupabaseClient) {
   }
 }
 
-async function getLoggedInSupabaseClient(
-  cmd: Command,
-) {
+async function getLoggedInSupabaseClient(cmd: Command) {
   const s = getSupabaseClient({
     store: true,
     ...cmd.optsWithGlobals(),
@@ -1351,7 +1401,7 @@ async function getLoggedInSupabaseClient(
     const session = await s.auth.getSession();
     if (!session.data.session) {
       console.error("Failed to log in");
-      Deno.exit(1);
+      process.exit(1);
     }
     return s;
   }
@@ -1359,18 +1409,19 @@ async function getLoggedInSupabaseClient(
 }
 
 function getSmplyConfigDir() {
-  return path.join(Deno.env.get("HOME") ?? ".", ".smply");
+  return path.join(process.env.HOME ?? ".", ".smply");
 }
 
-function getSupabaseClient(
-  { accessToken, store }: { accessToken?: string; store?: boolean },
-) {
+function getSupabaseClient({
+  accessToken,
+  store,
+}: {
+  accessToken?: string;
+  store?: boolean;
+}) {
   const projectRef = "wzmjedymhlqansmxtsmo";
   const expectedKey = `sb-${projectRef}-auth-token`;
-  const tokenFile = path.join(
-    getSmplyConfigDir(),
-    "credentials",
-  );
+  const tokenFile = path.join(getSmplyConfigDir(), "credentials");
 
   return createClient<Database>(
     `https://${projectRef}.supabase.co`,
@@ -1385,10 +1436,10 @@ function getSupabaseClient(
               }
 
               try {
-                const item = await Deno.readTextFile(tokenFile);
+                const item = await fs.readFile(tokenFile, { encoding: "utf8" });
                 return item;
               } catch (e) {
-                if (e instanceof Deno.errors.NotFound || e.code === "ENOENT") {
+                if (e.code === "ENOENT") {
                   return null;
                 }
                 throw e;
@@ -1401,11 +1452,14 @@ function getSupabaseClient(
           },
           setItem: async (key: string, value: string) => {
             if (key === expectedKey && store) {
-              await Deno.mkdir(path.dirname(tokenFile), {
+              await fs.mkdir(path.dirname(tokenFile), {
                 recursive: true,
                 mode: 0o700,
               });
-              return Deno.writeTextFile(tokenFile, value, { mode: 0o600 });
+              return fs.writeFile(tokenFile, value, {
+                encoding: "utf8",
+                mode: 0o600,
+              });
             }
           },
         },

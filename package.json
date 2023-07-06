@@ -1,0 +1,55 @@
+{
+  "name": "smply",
+  "version": "0.1.5",
+  "description": "The CLI the StateBacked.dev XState backend as a service",
+  "license": "MIT",
+  "author": "Adam Berger <adam@statebacked.dev>",
+  "bin": "./dist/index.js",
+  "module": "./dist/index.js",
+  "type": "module",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prettier": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.1.6"
+  },
+  "keywords": [
+    "statechart",
+    "state machine",
+    "scxml",
+    "state",
+    "finite state machine",
+    "state backed",
+    "backend as a service",
+    "paas"
+  ],
+  "homepage": "https://statebacked.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/statebacked/smply.git"
+  },
+  "bugs": {
+    "url": "https://github.com/statebacked/smply/issues"
+  },
+  "exports": {
+    ".": {
+      "import": "./esm/mod.js"
+    }
+  },
+  "dependencies": {
+    "@gjsify/esbuild-plugin-deno-loader": "^0.0.3",
+    "@statebacked/token": "^0.2.0",
+    "@supabase/supabase-js": "2.26.0",
+    "commander": "11.0.0",
+    "esbuild": "^0.18.11",
+    "node-fetch": "^3.3.1",
+    "why-is-node-running": "^2.2.2"
+  }
+}

@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: 
+    branches:
       - "**"
   pull_request:
     branches:
-      - '**'
+      - "**"
 
 permissions:
   contents: read
@@ -22,12 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: '16'
+          node-version: "16"
+          cache: "npm"
 
-      - uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.34.3
-
-      - run: ./scripts/check.sh --no-docker
-
-      - run: ./scripts/build.sh --no-docker 0.1.0
+      - run: npm run build
