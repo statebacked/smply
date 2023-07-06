@@ -1229,7 +1229,7 @@ async function login(opts: { store: boolean }) {
   const s = getSupabaseClient({ store: shouldStore });
   const email = prompt("What is your email address?");
   if (!email) {
-    console.error("No token provided");
+    console.error("No email provided");
     Deno.exit(1);
   }
   const a = await s.auth.signInWithOtp({ email });
