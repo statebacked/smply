@@ -8,7 +8,7 @@ import {
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import * as readline from "node:readline";
-import fetch, { FormData, Blob } from 'node-fetch';
+import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
 import { Database } from "./supabase.js";
 import { build } from "./build.js";
@@ -38,7 +38,7 @@ const allowedScopes = [
 
 main();
 
-function main() {
+async function main() {
   const program = new Command("smply");
   program
     .name("smply")
@@ -328,7 +328,11 @@ function main() {
     )
     .action(acceptInvitation);
 
-  const _args = program.parse();
+  try {
+    await program.parseAsync();
+  } catch (err) {
+    console.error("oops", err.message);
+  }
 }
 
 function withPaginationOptions(cmd: Command) {
@@ -1238,7 +1242,7 @@ async function prompt(q: string): Promise<string> {
   });
 
   return new Promise((resolve) => {
-    rl.question(q + " ", res => {
+    rl.question(q + " ", (res) => {
       rl.close();
       resolve(res);
     });
