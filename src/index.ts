@@ -10,6 +10,7 @@ import * as fs from "node:fs/promises";
 import * as readline from "node:readline";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
+import { StateBackedClient } from "@statebacked/client";
 import { Database } from "./supabase.js";
 import { build } from "./build.js";
 
@@ -50,7 +51,7 @@ async function main() {
       "afterAll",
       "\nDocumentation: https://docs.statebacked.dev\nSupport: support@statebacked.dev\n",
     )
-    .version(VERSION)
+    .version(VERSION, "-V, --smply-version", "Output the current version")
     .description(
       `Command line tool for State Backed.\n\nState Backed runs statecharts as a service.`,
     )
@@ -123,12 +124,12 @@ async function main() {
       "0.0.1",
     )
     .option(
-      "-f, --file <file>",
-      "Path to the single javascript file that exports the machine definition. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "-j, --js <file>",
+      "Path to the single javascript file that exports the machine definition. If neither of --js or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .option(
       "-n, --node <file>",
-      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --js or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .action(createMachine);
 
@@ -145,12 +146,12 @@ async function main() {
       "Name for the version. E.g. git commit sha or semantic version identifier.",
     )
     .option(
-      "-f, --file <file>",
-      "Path to the single javascript file that exports the machine definition. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "-j, --js <file>",
+      "Path to the single javascript file that exports the machine definition. Exactly one of --js or --node must be specified.",
     )
     .option(
       "-n, --node <file>",
-      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --file or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
+      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. Exactly one of --js or --node must be specified.",
     )
     .option(
       "-c, --make-current",
@@ -163,6 +164,32 @@ async function main() {
     .description("List versions of a machine definition")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(listMachineVersions);
+
+  const migrations = program
+    .command("migrations")
+    .description("Manage migrations between machine versions");
+
+  migrations
+    .command("create")
+    .description("Create a new migration between machine versions")
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .requiredOption(
+      "-f, --from <from>",
+      "Machine version ID of the version that is the source of the migration (required)",
+    )
+    .requiredOption(
+      "-t, --to <to>",
+      "Machine version ID of the version that is the target of the migration (required)",
+    )
+    .option(
+      "-j, --js <file>",
+      "Path to the single javascript file that exports upgradeState and upgradeContext functions. Exactly one of --js or --node must be specified.",
+    )
+    .option(
+      "-n, --node <file>",
+      "Path to the Node.js entrypoint that exports upgradeState and upgradeContext functions. We will build the file into a single, self-contained ECMAScript module. Exactly one of --js or --node must be specified.",
+    )
+    .action(createMachineVersionMigration);
 
   const instances = program
     .command("instances")
@@ -222,6 +249,17 @@ async function main() {
       'JSON auth context to use when creating the machine instance. E.g. \'{"sub": "user_1234"}\' Provide only one of --token and --auth-context.',
     )
     .action(sendEventToMachineInstance);
+
+  instances
+    .command("set-desired-version")
+    .description("Set the desired version for this instance")
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .requiredOption("-i, --instance <instance>", "Instance name (required)")
+    .requiredOption(
+      "-v, --version <version>",
+      "Desired machine version ID to use for this instance (required)",
+    )
+    .action(setDesiredMachineInstanceVersion);
 
   const orgs = program.command("orgs").description("Manage organizations");
 
@@ -331,7 +369,7 @@ async function main() {
   try {
     await program.parseAsync();
   } catch (err) {
-    console.error("oops", err.message);
+    console.error(err.message);
   }
 }
 
@@ -354,6 +392,15 @@ type PaginationOptions = {
 
 function defaultOrgFile() {
   return path.join(getSmplyConfigDir(), "default-org");
+}
+
+async function getStatebackedClient(options: Command) {
+  const apiHost = getApiURL(options);
+  const s = await getLoggedInSupabaseClient(options);
+  const accessToken = (await s.auth.getSession()).data?.session?.access_token;
+  const orgId = await getEffectiveOrg(options);
+
+  return new StateBackedClient(accessToken, { orgId, apiHost });
 }
 
 async function getHeaders(options: Command) {
@@ -694,12 +741,9 @@ async function createKey(
 }
 
 async function createMachine(
-  opts: {
+  opts: BuildOpts & {
     machine: string;
     versionReference?: string;
-    file?: string;
-    node?: string;
-    deno?: string;
   },
   options: Command,
 ) {
@@ -725,12 +769,12 @@ async function createMachine(
 
   console.log(`Created machine: '${opts.machine}'`);
 
-  if (opts.file || opts.node || opts.deno) {
+  if (opts.js || opts.node || opts.deno) {
     await createMachineVersion(
       {
         machine: opts.machine,
         versionReference: opts.versionReference ?? "0.0.1",
-        file: opts.file,
+        js: opts.js,
         node: opts.node,
         deno: opts.deno,
         makeCurrent: true,
@@ -781,41 +825,14 @@ async function listMachineVersions(
 }
 
 async function createMachineVersion(
-  opts: {
+  opts: BuildOpts & {
     machine: string;
     versionReference: string;
-    file?: string;
-    node?: string;
-    deno?: string;
     makeCurrent: boolean;
   },
   options: Command,
 ) {
-  const count = [opts.file, opts.node, opts.deno].filter(Boolean).length;
-
-  if (count !== 1) {
-    throw new InvalidArgumentError(
-      "Exactly one of --file or --node must be specified",
-    );
-  }
-
-  const code = opts.file
-    ? {
-        fileName: path.basename(opts.file),
-        code: await fs.readFile(opts.file, { encoding: "utf8" }),
-      }
-    : opts.deno
-    ? await build(opts.deno, "deno")
-    : opts.node
-    ? await build(opts.node, "node")
-    : null;
-
-  if (!code) {
-    throw new InvalidArgumentError(
-      "Exactly one of --file or --node must be specified",
-    );
-  }
-
+  const code = await buildFromCommand(opts);
   const headers = await getHeaders(options);
 
   const versionCreationStep1Res = await fetch(
@@ -883,6 +900,83 @@ async function createMachineVersion(
   }
 
   console.log(`Created version: '${opts.versionReference}'`);
+}
+
+type BuildOpts = {
+  js?: string;
+  node?: string;
+  deno?: string;
+};
+
+async function buildFromCommand(opts: BuildOpts) {
+  const count = [opts.js, opts.node, opts.deno].filter(Boolean).length;
+
+  if (count !== 1) {
+    throw new InvalidArgumentError(
+      "Exactly one of --js or --node must be specified",
+    );
+  }
+
+  const code = opts.js
+    ? {
+        fileName: path.basename(opts.js),
+        code: await fs.readFile(opts.js, { encoding: "utf8" }),
+      }
+    : opts.deno
+    ? await build(opts.deno, "deno")
+    : opts.node
+    ? await build(opts.node, "node")
+    : null;
+
+  if (!code) {
+    throw new InvalidArgumentError(
+      "Exactly one of --js or --node must be specified",
+    );
+  }
+
+  return code;
+}
+
+async function createMachineVersionMigration(
+  opts: BuildOpts & {
+    machine: string;
+    from?: string;
+    to?: string;
+  },
+  options: Command,
+) {
+  const code = await buildFromCommand(opts);
+  const client = await getStatebackedClient(options);
+
+  const migration =
+    await client.machineVersionMigrations.createVersionMigration(opts.machine, {
+      fromMachineVersionId: opts.from,
+      toMachineVersionId: opts.to,
+      code: code.code,
+    });
+
+  console.log(migration);
+}
+
+async function setDesiredMachineInstanceVersion(
+  opts: {
+    machine: string;
+    instance: string;
+    version: string;
+  },
+  options: Command,
+) {
+  const client = await getStatebackedClient(options);
+
+  await client.machineInstances.updateDesiredVersion(
+    opts.machine,
+    opts.instance,
+    {
+      targetMachineVersionId: opts.version,
+    },
+  );
+
+  console.log("Successfully set desired version");
 }
 
 async function sendEventToMachineInstance(
