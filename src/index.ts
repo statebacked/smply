@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import * as util from "node:util";
 import { Command, InvalidArgumentError } from "commander";
 import {
   createClient,
@@ -446,6 +447,10 @@ const [whileSuppressingOrgCreationPrompt, isOrgCreationPromptSuppressed] =
     return [whileSuppressingOrgCreationPrompt, isOrgCreationPromptSuppressed];
   })();
 
+function writeObj(obj: any) {
+  console.log(util.inspect(obj, { depth: null, colors: true }));
+}
+
 async function acceptInvitation(
   opts: { invitation: string },
   options: Command,
@@ -607,7 +612,7 @@ const toUserId = toPrettyId.bind(null, "usr");
 async function createOrg(opts: { name: string }, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
   const orgId = await doCreateOrg(s, opts.name);
-  console.log({
+  writeObj({
     orgId,
   });
 }
@@ -758,7 +763,7 @@ async function createKey(
   console.log(
     "Store this key safely now. You can create additional keys in the future but this key will never be shown again!",
   );
-  console.log({ id, key });
+  writeObj({ id, key });
 }
 
 async function createMachine(
@@ -976,7 +981,7 @@ async function createMachineVersionMigration(
       code: code.code,
     });
 
-  console.log(migration);
+  writeObj(migration);
 }
 
 async function setDesiredMachineInstanceVersion(
@@ -1041,7 +1046,7 @@ async function sendEventToMachineInstance(
     );
   }
 
-  console.log(await eventResponse.json());
+  writeObj(await eventResponse.json());
 }
 
 async function createMachineInstance(
@@ -1088,7 +1093,7 @@ async function createMachineInstance(
     );
   }
 
-  console.log(await instanceCreationResponse.json());
+  writeObj(await instanceCreationResponse.json());
 }
 
 async function getMachineInstance(
@@ -1142,7 +1147,7 @@ async function getMachineInstance(
   const machineInstanceState = singleton(data.machine_instance_state);
   const latestTransition = singleton(machineInstanceState?.machine_transitions);
 
-  console.log({
+  writeObj({
     machineVersionId: toMachineVersionId(machineVersions?.id),
     machineVersionReference: machineVersions?.client_info,
     machineName: singleton(machineVersions?.machines)?.slug,
@@ -1264,7 +1269,7 @@ async function getMachine(opts: { machine: string }, options: Command) {
     singleton(data.current_machine_versions)?.machine_versions,
   );
 
-  console.log({
+  writeObj({
     name: data.slug,
     createdAt: data.created_at,
     createdBy: toUserId(data.created_by),
@@ -1335,7 +1340,7 @@ async function paginate<T>(
   let more = true;
   while (more) {
     const page = await getItems({ from, to });
-    console.log(page);
+    writeObj(page);
 
     if (!shouldPaginate || page.length < pageSize) {
       more = false;
@@ -1371,7 +1376,7 @@ async function whoami(_: unknown, options: Command) {
     console.error(error.message);
     process.exit(1);
   }
-  console.log({
+  writeObj({
     email: data.user.email,
     userId: data.user.id,
     defaultOrg: await getEffectiveOrg(options),
@@ -1484,7 +1489,7 @@ async function promptForOrgCreation(s: SupabaseClient) {
     console.log(
       "Created org. You can now create machines with `smply machines create`. Manage your org billing with `smply billing`",
     );
-    console.log({ orgId });
+    writeObj({ orgId });
   }
 }
 
