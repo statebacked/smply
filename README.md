@@ -11,8 +11,7 @@ get started with your own XState backend as a service.
 
 ```bash
 $ npm install -g smply
-$ npx esbuild --bundle --format=esm --outfile=./toggler.js ./toggler.ts
-$ smply machines create --machine toggler --node ./toggler.js
+$ smply machines create --machine toggler --node ./toggler.ts
 $ # You can now launch instances of your toggler machine, send events, and read state!
 ```
 
@@ -22,12 +21,17 @@ $ # You can now launch instances of your toggler machine, send events, and read 
 import { createMachine } from "xstate";
 import type { AllowRead, AllowWrite } from "@statebacked/machine-def";
 
+// super simple authorization
+// authContext comes from a JWT that you create your user's information,
+// signed with one of your State Backed keys (generate a key via `smply keys create`)
 export allowRead: AllowRead = ({ machineInstanceName, authContext }) =>
   machineInstanceName === authContext.sub
 
 export allowWrite: AllowWrite = ({ machineInstanceName, authContext }) =>
   machineInstanceName === authContext.sub
 
+// export any XState state machine with any guards, actions, or services and any delays.
+// just make sure that no service runs for more than 10 seconds.
 export default createMachine({
   predictableActionArguments: true,
   initial: "on",
