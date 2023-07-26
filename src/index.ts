@@ -262,6 +262,12 @@ async function main() {
     )
     .action(setDesiredMachineInstanceVersion);
 
+  withPaginationOptions(instances.command("list-transitions"))
+    .description("List the transitions for this instance")
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .requiredOption("-i, --instance <instance>", "Instance name (required)")
+    .action(listInstanceTransitions);
+
   const orgs = program.command("orgs").description("Manage organizations");
 
   withPaginationOptions(
@@ -1162,6 +1168,54 @@ async function getMachineInstance(
   });
 }
 
+async function listInstanceTransitions(
+  opts: PaginationOptions & { machine: string },
+  options: Command,
+) {
+  const s = await getLoggedInSupabaseClient(options);
+
+  const {
+    data: { id: machineId, org_id: orgId },
+  } = await s
+    .from("machines")
+    .select("id, org_id")
+    .filter("slug", "eq", opts.machine)
+    .single();
+
+  await paginate(opts, async ({ from, to }) => {
+    const { data, error } = await s
+      .from("machine_transitions")
+      .select(
+        `
+          created_at,
+          state,
+          machine_instances (
+            extended_slug
+          )
+        `,
+      )
+      .filter(
+        "machine_instances.extended_slug",
+        "eq",
+        `${orgId}/${machineId}/${opts.machine}`,
+      )
+      .order("created_at", getSortOpts(opts))
+      .range(from, to);
+    if (error) {
+      console.error(error.message);
+      throw error;
+    }
+
+    return data.map((transition) => {
+      return {
+        createdAt: transition.created_at,
+        state: (transition.state as any)?.value,
+        event: (transition.state as any)?.event.data,
+      };
+    });
+  });
+}
+
 async function listMachineInstances(
   opts: PaginationOptions & { machine: string },
   options: Command,
@@ -1215,7 +1269,7 @@ async function listMachineInstances(
         name: inst.extended_slug.split("/", 3)[2],
         createdAt: inst.created_at,
         latestTransition: {
-          created_at: latestTransition?.created_at,
+          createdAt: latestTransition?.created_at,
           state: (latestTransition?.state as any)?.value,
           event: (latestTransition?.state as any)?.event.data,
         },
