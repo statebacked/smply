@@ -579,9 +579,30 @@ async function listOrgs(opts: PaginationOptions, options: Command) {
       throw error;
     }
 
-    return data;
+    return data.map((o) => ({
+      id: toOrgId(o.id),
+      createdAt: o.created_at,
+      name: o.name,
+      limits: o.org_limits && {
+        monthlyEventsLimit: singleton(o.org_limits).monthly_events_limit,
+        monthlyReadsLimit: singleton(o.org_limits).monthly_reads_limit,
+      },
+    }));
   });
 }
+
+function toPrettyId(prefix: string, id: string | undefined) {
+  return (
+    id &&
+    prefix +
+      "_" +
+      Buffer.from(id.replace(/[-]/g, ""), "hex").toString("base64url")
+  );
+}
+
+const toOrgId = toPrettyId.bind(null, "org");
+const toMachineVersionId = toPrettyId.bind(null, "ver");
+const toUserId = toPrettyId.bind(null, "usr");
 
 async function createOrg(opts: { name: string }, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
@@ -613,7 +634,7 @@ async function doCreateOrg(s: SupabaseClient, orgName: string) {
     throw err;
   }
 
-  return data.id;
+  return toOrgId(data.id);
 }
 
 async function generateToken(opts: {
@@ -814,10 +835,10 @@ async function listMachineVersions(
 
     return data.map(
       ({ id, client_info, created_at, current_machine_versions }) => ({
-        id,
-        client_info,
-        created_at,
-        is_current:
+        id: toMachineVersionId(id),
+        clientInfo: client_info,
+        createdAt: created_at,
+        isCurrent:
           current_machine_versions && current_machine_versions.length > 0,
       }),
     );
@@ -1122,13 +1143,13 @@ async function getMachineInstance(
   const latestTransition = singleton(machineInstanceState?.machine_transitions);
 
   console.log({
-    machine_version_id: machineVersions?.id,
-    machine_version_reference: machineVersions?.client_info,
-    machine_name: singleton(machineVersions?.machines)?.slug,
-    created_at: data.created_at,
+    machineVersionId: toMachineVersionId(machineVersions?.id),
+    machineVersionReference: machineVersions?.client_info,
+    machineName: singleton(machineVersions?.machines)?.slug,
+    createdAt: data.created_at,
     name: data.extended_slug.split("/", 3)[2],
-    latest_transition: latestTransition && {
-      created_at: latestTransition.created_at,
+    latestTransition: latestTransition && {
+      createdAt: latestTransition.created_at,
       state: (latestTransition.state as any)?.value,
       event: (latestTransition.state as any)?.event.data,
       context: (latestTransition.state as any)?.context,
@@ -1187,15 +1208,15 @@ async function listMachineInstances(
 
       return {
         name: inst.extended_slug.split("/", 3)[2],
-        created_at: inst.created_at,
-        latest_transition: {
+        createdAt: inst.created_at,
+        latestTransition: {
           created_at: latestTransition?.created_at,
           state: (latestTransition?.state as any)?.value,
           event: (latestTransition?.state as any)?.event.data,
         },
-        machine_version_id: machineVersion?.id,
-        machine_version_reference: machineVersion?.client_info,
-        machine_name: singleton(machineVersion?.machines)?.slug,
+        machineVersionId: toMachineVersionId(machineVersion?.id),
+        machineVersionReference: machineVersion?.client_info,
+        machineName: singleton(machineVersion?.machines)?.slug,
       };
     });
   });
@@ -1245,12 +1266,12 @@ async function getMachine(opts: { machine: string }, options: Command) {
 
   console.log({
     name: data.slug,
-    created_at: data.created_at,
-    created_by: data.created_by,
-    current_version: machineVersion && {
-      id: machineVersion.id,
-      created_at: machineVersion.created_at,
-      client_info: machineVersion.client_info,
+    createdAt: data.created_at,
+    createdBy: toUserId(data.created_by),
+    currentVersion: machineVersion && {
+      id: toMachineVersionId(machineVersion.id),
+      createdAt: machineVersion.created_at,
+      clientInfo: machineVersion.client_info,
     },
   });
 }
@@ -1290,12 +1311,12 @@ async function listMachines(opts: PaginationOptions, options: Command) {
 
         return {
           name: slug,
-          created_at,
-          created_by,
-          current_version: machineVersion && {
-            id: machineVersion.id,
-            created_at: machineVersion.created_at,
-            client_info: machineVersion.client_info,
+          createdAt: created_at,
+          createdBy: toUserId(created_by),
+          currentVersion: machineVersion && {
+            id: toMachineVersionId(machineVersion.id),
+            createdAt: machineVersion.created_at,
+            clientInfo: machineVersion.client_info,
           },
         };
       },
