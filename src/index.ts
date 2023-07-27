@@ -454,7 +454,7 @@ const [whileSuppressingOrgCreationPrompt, isOrgCreationPromptSuppressed] =
   })();
 
 function writeObj(obj: any) {
-  console.log(util.inspect(obj, { depth: null, colors: true }));
+  console.log(JSON.stringify(obj, null, 2));
 }
 
 async function acceptInvitation(
@@ -799,10 +799,13 @@ async function createMachine(
     );
   }
 
-  console.log(`Created machine: '${opts.machine}'`);
+  const output = {
+    name: opts.machine,
+    currentVersion: undefined,
+  };
 
   if (opts.js || opts.node || opts.deno) {
-    await createMachineVersion(
+    output.currentVersion = await _createMachineVersion(
       {
         machine: opts.machine,
         versionReference: opts.versionReference ?? "0.0.1",
@@ -810,12 +813,13 @@ async function createMachine(
         node: opts.node,
         deno: opts.deno,
         makeCurrent: true,
+        quiet: true,
       },
       options,
     );
   }
 
-  console.log(`Machine '${opts.machine}' is ready to be launched`);
+  writeObj(output);
 }
 
 async function listMachineVersions(
@@ -864,74 +868,33 @@ async function createMachineVersion(
   },
   options: Command,
 ) {
+  await _createMachineVersion(opts, options);
+}
+
+async function _createMachineVersion(
+  opts: BuildOpts & {
+    machine: string;
+    versionReference: string;
+    makeCurrent: boolean;
+    quiet?: boolean;
+  },
+  options: Command,
+) {
   const code = await buildFromCommand(opts);
-  const headers = await getHeaders(options);
 
-  const versionCreationStep1Res = await fetch(
-    `${getApiURL(options)}/machines/${opts.machine}/v`,
-    {
-      headers,
-      method: "POST",
-      body: JSON.stringify({}),
-    },
-  );
-  if (!versionCreationStep1Res.ok) {
-    throw new Error(
-      `failed to create version (${
-        versionCreationStep1Res.status
-      }): ${await versionCreationStep1Res.text()}`,
-    );
-  }
+  const client = await getStatebackedClient(options);
 
-  const { machineVersionId, codeUploadUrl, codeUploadFields } =
-    (await versionCreationStep1Res.json()) as any;
-
-  const uploadForm = new FormData();
-  for (const [key, value] of Object.entries(codeUploadFields)) {
-    uploadForm.append(key, value as string);
-  }
-  uploadForm.set("content-type", "application/javascript");
-  uploadForm.append(
-    "file",
-    new Blob([code.code], {
-      type: "application/javascript",
-    }),
-    code.fileName,
-  );
-
-  const uploadRes = await fetch(codeUploadUrl, {
-    method: "POST",
-    body: uploadForm,
+  const version = await client.machineVersions.createVersion(opts.machine, {
+    clientInfo: opts.versionReference,
+    code: code.code,
+    makeCurrent: opts.makeCurrent,
   });
-  if (!uploadRes.ok) {
-    throw new Error(
-      `failed to upload code for version (${
-        uploadRes.status
-      }): ${await uploadRes.text()}`,
-    );
+
+  if (!opts.quiet) {
+    writeObj(version);
   }
 
-  const versionCreationStep2Res = await fetch(
-    `${getApiURL(options)}/machines/${opts.machine}/v/${machineVersionId}`,
-    {
-      headers,
-      method: "PUT",
-      body: JSON.stringify({
-        clientInfo: opts.versionReference,
-        makeCurrent: opts.makeCurrent,
-      }),
-    },
-  );
-
-  if (!versionCreationStep2Res.ok) {
-    throw new Error(
-      `failed to create version (${
-        versionCreationStep2Res.status
-      }): ${await versionCreationStep2Res.text()}`,
-    );
-  }
-
-  console.log(`Created version: '${opts.versionReference}'`);
+  return version;
 }
 
 type BuildOpts = {
