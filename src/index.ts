@@ -895,7 +895,7 @@ async function _createMachineVersion(
 
   const client = await getStatebackedClient(options);
 
-  const version = await client.machineVersions.createVersion(opts.machine, {
+  const version = await client.machineVersions.create(opts.machine, {
     clientInfo: opts.versionReference,
     code: code.code,
     makeCurrent: opts.makeCurrent,
@@ -954,12 +954,11 @@ async function createMachineVersionMigration(
   const code = await buildFromCommand(opts);
   const client = await getStatebackedClient(options);
 
-  const migration =
-    await client.machineVersionMigrations.createVersionMigration(opts.machine, {
-      fromMachineVersionId: opts.from,
-      toMachineVersionId: opts.to,
-      code: code.code,
-    });
+  const migration = await client.machineVersionMigrations.create(opts.machine, {
+    fromMachineVersionId: opts.from,
+    toMachineVersionId: opts.to,
+    code: code.code,
+  });
 
   writeObj(migration);
 }
