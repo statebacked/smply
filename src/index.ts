@@ -1142,7 +1142,7 @@ async function getMachineInstance(
 }
 
 async function listInstanceTransitions(
-  opts: PaginationOptions & { machine: string },
+  opts: PaginationOptions & { machine: string; instance: string },
   options: Command,
 ) {
   const s = await getLoggedInSupabaseClient(options);
@@ -1162,7 +1162,7 @@ async function listInstanceTransitions(
         `
           created_at,
           state,
-          machine_instances (
+          machine_instances:machine_instance_id!inner (
             extended_slug
           )
         `,
@@ -1170,7 +1170,7 @@ async function listInstanceTransitions(
       .filter(
         "machine_instances.extended_slug",
         "eq",
-        `${orgId}/${machineId}/${opts.machine}`,
+        `${orgId}/${machineId}/${opts.instance}`,
       )
       .order("created_at", getSortOpts(opts))
       .range(from, to);
