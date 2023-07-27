@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import * as util from "node:util";
 import { Command, InvalidArgumentError } from "commander";
 import {
   createClient,
@@ -376,7 +375,19 @@ async function main() {
   try {
     await program.parseAsync();
   } catch (err) {
-    console.error(err.message);
+    const code = err?.code ? `(${err.code})` : "";
+    const name = err?.name ? err.name : "";
+    const msg = [
+      name,
+      name && code ? " " : "",
+      code,
+      name || code ? ": " : "",
+      err?.message,
+    ]
+      .filter(Boolean)
+      .join("");
+    console.error(msg);
+    process.exit(1);
   }
 }
 
