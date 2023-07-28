@@ -8,6 +8,7 @@ import {
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import * as readline from "node:readline";
+import * as zlib from "node:zlib";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
 import { StateBackedClient } from "@statebacked/client";
@@ -882,6 +883,18 @@ async function createMachineVersion(
   await _createMachineVersion(opts, options);
 }
 
+async function gzip(data: string) {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    zlib.gzip(data, (err, gzipped) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(new Uint8Array(gzipped.buffer, 0, gzipped.length));
+    });
+  });
+}
+
 async function _createMachineVersion(
   opts: BuildOpts & {
     machine: string;
@@ -892,13 +905,14 @@ async function _createMachineVersion(
   options: Command,
 ) {
   const code = await buildFromCommand(opts);
+  const gzippedCode = await gzip(code.code);
 
   const client = await getStatebackedClient(options);
 
   const version = await client.machineVersions.create(opts.machine, {
     clientInfo: opts.versionReference,
-    code: code.code,
     makeCurrent: opts.makeCurrent,
+    gzippedCode,
   });
 
   if (!opts.quiet) {
@@ -953,11 +967,12 @@ async function createMachineVersionMigration(
 ) {
   const code = await buildFromCommand(opts);
   const client = await getStatebackedClient(options);
+  const gzippedCode = await gzip(code.code);
 
   const migration = await client.machineVersionMigrations.create(opts.machine, {
     fromMachineVersionId: opts.from,
     toMachineVersionId: opts.to,
-    code: code.code,
+    gzippedCode,
   });
 
   writeObj(migration);

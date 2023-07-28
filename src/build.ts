@@ -14,6 +14,13 @@ export async function build(inputFile: string, inputType: "node" | "deno") {
       outfile: outFile,
       platform: "browser",
       format: "esm",
+      minify: true,
+      keepNames: true,
+      legalComments: "none",
+      define: {
+        "process.env.NODE_ENV": '"production"',
+      },
+      drop: ["debugger"],
       plugins: inputType === "deno" ? [denoPlugin()] : [],
     });
 
