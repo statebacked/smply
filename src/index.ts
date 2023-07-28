@@ -21,7 +21,7 @@ globalThis.Blob = Blob as any;
 
 type SupabaseClient = RawSupabaseClient<Database>;
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.11";
 
 const allowedScopes = [
   "events.write",

@@ -1,6 +1,6 @@
 {
   "name": "smply",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "The smply CLI for the StateBacked.dev XState backend as a service",
   "license": "MIT",
   "author": "Adam Berger <adam@statebacked.dev>",
@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@gjsify/esbuild-plugin-deno-loader": "^0.0.3",
-    "@statebacked/client": "^0.1.12",
+    "@statebacked/client": "^0.1.13",
     "@statebacked/token": "^0.2.0",
     "@supabase/supabase-js": "2.26.0",
     "commander": "11.0.0",
