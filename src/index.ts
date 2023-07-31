@@ -890,7 +890,9 @@ async function gzip(data: string) {
         reject(err);
         return;
       }
-      resolve(new Uint8Array(gzipped.buffer, gzipped.byteOffset, gzipped.byteLength));
+      resolve(
+        new Uint8Array(gzipped.buffer, gzipped.byteOffset, gzipped.byteLength),
+      );
     });
   });
 }
