@@ -9,7 +9,7 @@ const week = day * 7;
 const year = day * 365.25;
 
 const REGEX =
-  /^[-]?(\d+|\d+\.\d+) ?(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)$/i;
+  /^([-]?\d+|\d+\.\d+) ?(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)$/i;
 
 const seconds = (str: string): number => {
   const matched = REGEX.exec(str);
