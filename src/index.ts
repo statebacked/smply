@@ -1052,6 +1052,16 @@ async function sendEventToMachineInstance(
     );
   }
 
+  const event = (() => {
+    try {
+      return opts.event.trimStart().startsWith("{")
+        ? JSON.parse(opts.event)
+        : opts.event;
+    } catch (err) {
+      return opts.event;
+    }
+  })();
+
   const eventResponse = await fetch(
     `${getApiURL(options)}/machines/${opts.machine}/i/${opts.instance}/events`,
     {
@@ -1062,7 +1072,7 @@ async function sendEventToMachineInstance(
       },
       method: "POST",
       body: JSON.stringify({
-        event: opts.event,
+        event,
       }),
     },
   );
