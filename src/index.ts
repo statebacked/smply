@@ -268,6 +268,33 @@ async function main() {
     .requiredOption("-i, --instance <instance>", "Instance name (required)")
     .action(listInstanceTransitions);
 
+  const logs = program
+    .command("logs")
+    .description(
+      "Retrieve execution logs for transitions, actions, services, authorizers, and migrations",
+    );
+
+  logs
+    .command("get")
+    .description("Retrieve one batch of logs")
+    .requiredOption(
+      "-f, --from <from>",
+      "Start date in ISO8201 format or relative format (e.g. '-1h') (required)",
+    )
+    .option(
+      "-t, --to <to>",
+      "End date in ISO8201 format or relative format, interpreted relative to `from` (e.g. '1h')",
+    )
+    .option("-m, --machine <machine>", "Machine name")
+    .option("-i, --instance <instance>", "Instance name")
+    .option("-v, --version <version>", "Machine version ID")
+    .option(
+      "-c, --clean",
+      "Only output the clean log lines without metadata",
+      false,
+    )
+    .action(getLogs);
+
   const orgs = program.command("orgs").description("Manage organizations");
 
   withPaginationOptions(
@@ -1371,6 +1398,68 @@ async function listMachines(opts: PaginationOptions, options: Command) {
       },
     );
   });
+}
+
+async function getLogs(
+  opts: {
+    from: string;
+    to?: string;
+    machine?: string;
+    instance?: string;
+    version?: string;
+    clean?: boolean;
+  },
+  options: Command,
+) {
+  const client = await getStatebackedClient(options);
+
+  const from = new Date(opts.from);
+  const to = opts.to && new Date(opts.to);
+
+  if (Number.isNaN(from.getTime())) {
+    throw new InvalidArgumentError("invalid from date");
+  }
+
+  if (to && Number.isNaN(to.getTime())) {
+    throw new InvalidArgumentError("invalid to date");
+  }
+
+  const logs = await client.logs.retrieve(from, {
+    to,
+    machineName: opts.machine,
+    instanceName: opts.instance,
+    machineVersionId: opts.version,
+  });
+
+  if (!opts.clean) {
+    writeObj(logs);
+    return;
+  }
+
+  let lastIdentifier: string | undefined;
+  for (const log of logs.logs) {
+    const identifier = `${log.machineName}/${log.machineVersionId}/${log.instanceName}/${log.orgId}/${log.outputType}`;
+    if (identifier !== lastIdentifier) {
+      if (lastIdentifier) {
+        console.log();
+      }
+      console.log(
+        JSON.stringify({
+          msg: "logs for",
+          machineName: log.machineName,
+          instanceName: log.instanceName,
+          machineVersionId: log.machineVersionId,
+          orgId: log.orgId,
+        }),
+      );
+      console.log();
+      console.log(log.outputType);
+      console.log();
+      lastIdentifier = identifier;
+    }
+
+    console.log(log.log);
+  }
 }
 
 async function paginate<T>(
