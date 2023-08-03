@@ -839,25 +839,9 @@ async function createMachine(
   },
   options: Command,
 ) {
-  const headers = await getHeaders(options);
+  const client = await getStatebackedClient(options);
 
-  const machineCreationResponse = await fetch(
-    `${getApiURL(options)}/machines`,
-    {
-      headers,
-      method: "POST",
-      body: JSON.stringify({
-        slug: opts.machine,
-      }),
-    },
-  );
-  if (!machineCreationResponse.ok) {
-    throw new Error(
-      `failed to create machine (${
-        machineCreationResponse.status
-      }): ${await machineCreationResponse.text()}`,
-    );
-  }
+  await client.machines.create(opts.machine);
 
   const output = {
     name: opts.machine,
