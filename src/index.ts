@@ -14,6 +14,7 @@ import { signToken } from "@statebacked/token";
 import { LogEntry, StateBackedClient } from "@statebacked/client";
 import { Database } from "./supabase.js";
 import { build } from "./build.js";
+import { relativeTime } from "./relative-time.js";
 
 globalThis.fetch = fetch as any;
 globalThis.FormData = FormData as any;
@@ -1425,14 +1426,18 @@ type LogOpts = {
 };
 
 const validateLogOpts = (opts: LogOpts) => {
-  const from = new Date(opts.from);
+  const from = relativeTime(opts.from);
   if (Number.isNaN(from.getTime())) {
     throw new InvalidArgumentError("invalid from date");
   }
 
-  const to = opts.to && new Date(opts.to);
+  const to = opts.to && relativeTime(opts.to, from);
   if (to && Number.isNaN(to.getTime())) {
     throw new InvalidArgumentError("invalid to date");
+  }
+
+  if (to && to < from) {
+    throw new InvalidArgumentError("to must be after from");
   }
 
   return {
