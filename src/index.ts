@@ -11,7 +11,7 @@ import * as readline from "node:readline";
 import * as zlib from "node:zlib";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
-import { StateBackedClient } from "@statebacked/client";
+import { LogEntry, StateBackedClient } from "@statebacked/client";
 import { Database } from "./supabase.js";
 import { build } from "./build.js";
 
@@ -294,6 +294,27 @@ async function main() {
       false,
     )
     .action(getLogs);
+
+  logs
+    .command("watch")
+    .description("Read all relevant logs and poll for new logs")
+    .requiredOption(
+      "-f, --from <from>",
+      "Start date in ISO8201 format or relative format (e.g. '-1h') (required)",
+    )
+    .option(
+      "-t, --to <to>",
+      "End date in ISO8201 format or relative format, interpreted relative to `from` (e.g. '1h')",
+    )
+    .option("-m, --machine <machine>", "Machine name")
+    .option("-i, --instance <instance>", "Instance name")
+    .option("-v, --version <version>", "Machine version ID")
+    .option(
+      "-c, --clean",
+      "Only output the clean log lines without metadata",
+      false,
+    )
+    .action(watchLogs);
 
   const orgs = program.command("orgs").description("Manage organizations");
 
@@ -1400,44 +1421,59 @@ async function listMachines(opts: PaginationOptions, options: Command) {
   });
 }
 
-async function getLogs(
-  opts: {
-    from: string;
-    to?: string;
-    machine?: string;
-    instance?: string;
-    version?: string;
-    clean?: boolean;
-  },
-  options: Command,
-) {
-  const client = await getStatebackedClient(options);
+type LogOpts = {
+  from: string;
+  to?: string;
+  machine?: string;
+  instance?: string;
+  version?: string;
+  clean?: boolean;
+};
 
+const validateLogOpts = (opts: LogOpts) => {
   const from = new Date(opts.from);
-  const to = opts.to && new Date(opts.to);
-
   if (Number.isNaN(from.getTime())) {
     throw new InvalidArgumentError("invalid from date");
   }
 
+  const to = opts.to && new Date(opts.to);
   if (to && Number.isNaN(to.getTime())) {
     throw new InvalidArgumentError("invalid to date");
   }
 
-  const logs = await client.logs.retrieve(from, {
+  return {
+    ...opts,
+    from,
+    to,
+  };
+};
+
+async function watchLogs(opts: LogOpts, options: Command) {
+  const client = await getStatebackedClient(options);
+
+  const { from, to } = validateLogOpts(opts);
+
+  const logs = await client.logs.watch(from, {
     to,
     machineName: opts.machine,
     instanceName: opts.instance,
     machineVersionId: opts.version,
   });
 
-  if (!opts.clean) {
-    writeObj(logs);
-    return;
-  }
+  printLogs(logs, opts.clean);
+}
 
+async function printLogs(
+  logs: AsyncIterable<LogEntry> | Iterable<LogEntry>,
+  clean: boolean,
+) {
   let lastIdentifier: string | undefined;
-  for (const log of logs.logs) {
+  for await (const log of logs) {
+    if (!clean) {
+      writeObj(log);
+      continue;
+    }
+
     const identifier = `${log.machineName}/${log.machineVersionId}/${log.instanceName}/${log.orgId}/${log.outputType}`;
     if (identifier !== lastIdentifier) {
       if (lastIdentifier) {
@@ -1460,6 +1496,26 @@ async function getLogs(
 
     console.log(log.log);
   }
+}
+
+async function getLogs(opts: LogOpts, options: Command) {
+  const client = await getStatebackedClient(options);
+
+  const { from, to } = validateLogOpts(opts);
+
+  const logs = await client.logs.retrieve(from, {
+    to,
+    machineName: opts.machine,
+    instanceName: opts.instance,
+    machineVersionId: opts.version,
+  });
+
+  if (!opts.clean) {
+    writeObj(logs);
+    return;
+  }
+
+  await printLogs(logs.logs, opts.clean);
 }
 
 async function paginate<T>(
