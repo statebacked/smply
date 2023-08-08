@@ -1148,6 +1148,10 @@ async function getMachineInstance(
     .single();
 
   if (machineError) {
+    if (machineError.code === "PGRST116") {
+      console.error(`Machine '${opts.machine}' not found`);
+      return;
+    }
     console.error("failed to retrieve machine", machineError.message);
     throw machineError;
   }
@@ -1178,6 +1182,10 @@ async function getMachineInstance(
     .filter("extended_slug", "eq", `${orgId}/${machineId}/${opts.instance}`)
     .single();
   if (error) {
+    if (error.code === "PGRST116") {
+      console.error(`Instance '${opts.instance}' not found`);
+      return;
+    }
     console.error(error.message);
     throw error;
   }
@@ -1207,13 +1215,23 @@ async function listInstanceTransitions(
 ) {
   const s = await getLoggedInSupabaseClient(options);
 
-  const {
-    data: { id: machineId, org_id: orgId },
-  } = await s
+  const { data: machineData, error: machineError } = await s
     .from("machines")
     .select("id, org_id")
     .filter("slug", "eq", opts.machine)
     .single();
+
+  if (machineError) {
+    if (machineError.code === "PGRST116") {
+      console.error(`Machine '${opts.machine}' not found`);
+      return;
+    }
+
+    console.error("failed to retrieve machine", machineError.message);
+    throw machineError;
+  }
+
+  const { id: machineId, org_id: orgId } = machineData;
 
   await paginate(opts, async ({ from, to }) => {
     const { data, error } = await s
@@ -1348,6 +1366,10 @@ async function getMachine(opts: { machine: string }, options: Command) {
     .filter("slug", "eq", opts.machine)
     .single();
   if (error) {
+    if (error.code === "PGRST116") {
+      console.error(`Machine '${opts.machine}' not found`);
+      return;
+    }
     console.error(error.message);
     throw error;
   }
