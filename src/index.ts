@@ -11,7 +11,7 @@ import * as readline from "node:readline";
 import * as zlib from "node:zlib";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
-import { LogEntry, StateBackedClient } from "@statebacked/client";
+import { LogEntry, StateBackedClient, errors } from "@statebacked/client";
 import { Database } from "./supabase.js";
 import { build } from "./build.js";
 import { relativeTime } from "./relative-time.js";
@@ -134,6 +134,14 @@ async function main() {
       "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --js or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
     .action(createMachine);
+
+  machines
+    .command("delete")
+    .description(
+      "Delete a machine definition and any associated versions and migrations",
+    )
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .action(deleteMachine);
 
   const machineVersions = program
     .command("machine-versions")
@@ -268,6 +276,13 @@ async function main() {
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption("-i, --instance <instance>", "Instance name (required)")
     .action(listInstanceTransitions);
+
+  instances
+    .command("delete")
+    .description("Delete a machine instance")
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .requiredOption("-i, --instance <instance>", "Instance name (required)")
+    .action(deleteMachineInstance);
 
   const logs = program
     .command("logs")
@@ -867,6 +882,47 @@ async function createMachine(
   writeObj(output);
 }
 
+async function deleteMachine(
+  opts: BuildOpts & {
+    machine: string;
+  },
+  options: Command,
+) {
+  console.log("!!! WARNING !!!");
+  console.log("Deleting a machine cannot be undone.");
+  console.log(
+    "The machine and all of its versions and migrations will be permanently deleted.",
+  );
+
+  const confirmedMachineName = await prompt(
+    `Re-enter the machine name ("${opts.machine}") to confirm deletion:`,
+  );
+
+  if (confirmedMachineName !== opts.machine) {
+    console.log("Machine name did not match. Aborting.");
+    return;
+  }
+
+  const client = await getStatebackedClient(options);
+
+  try {
+    await client.machines.dangerously.delete(opts.machine, {
+      dangerDataWillBeDeletedForever: true,
+    });
+  } catch (err) {
+    if (err instanceof errors.ConflictError) {
+      console.warn(
+        "Machine has associated instances so cannot be deleted. You can delete the instances and then retry deleting the machine.",
+      );
+      return;
+    }
+
+    throw err;
+  }
+
+  console.log("Deleted machine");
+}
+
 async function listMachineVersions(
   opts: PaginationOptions & { machine: string },
   options: Command,
@@ -1330,6 +1386,39 @@ async function listMachineInstances(
       };
     });
   });
+}
+
+async function deleteMachineInstance(
+  opts: BuildOpts & {
+    machine: string;
+    instance: string;
+  },
+  options: Command,
+) {
+  console.log("!!! WARNING !!!");
+  console.log("Deleting an instance cannot be undone.");
+  console.log(
+    "The instance and its current state, all historical transitions, and any pending upgrades will be permanently deleted.",
+  );
+
+  const confirmedInstanceName = await prompt(
+    `Re-enter the instance name ("${opts.instance}") to confirm deletion:`,
+  );
+
+  if (confirmedInstanceName !== opts.instance) {
+    console.log("Instance name did not match. Aborting.");
+    return;
+  }
+
+  const client = await getStatebackedClient(options);
+
+  await client.machineInstances.dangerously.delete(
+    opts.machine,
+    opts.instance,
+    { dangerDataWillBeDeletedForever: true },
+  );
+
+  console.log("Deleted instance");
 }
 
 function singleton<T>(
