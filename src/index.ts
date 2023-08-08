@@ -278,6 +278,25 @@ async function main() {
     .action(listInstanceTransitions);
 
   instances
+    .command("set-status")
+    .description("Set the status (running or paused) for this instance")
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .requiredOption("-i, --instance <instance>", "Instance name (required)")
+    .requiredOption(
+      "-s, --status <status>",
+      "Status to set. One of 'running' or 'paused'. (required)",
+      (status: string) => {
+        if (["running", "paused"].indexOf(status) < 0) {
+          throw new InvalidArgumentError(
+            "status must be one of 'running' or 'paused'",
+          );
+        }
+        return status;
+      },
+    )
+    .action(setMachineInstanceStatus);
+
+  instances
     .command("delete")
     .description("Delete a machine instance")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
@@ -1419,6 +1438,46 @@ async function deleteMachineInstance(
   );
 
   console.log("Deleted instance");
+}
+
+async function setMachineInstanceStatus(
+  opts: BuildOpts & {
+    machine: string;
+    instance: string;
+    status: "paused" | "running";
+  },
+  options: Command,
+) {
+  if (opts.status === "paused") {
+    console.log("!!! WARNING !!!");
+    console.log(
+      "Pausing an instance is one of the only ways it can get into an invalid state.",
+    );
+    console.log(
+      "Paused instances reject all events, including delayed/scheduled events." +
+        "\n" +
+        "Delayed events are only retried 5 times before being discarded so pausing a machine may cause it to permanently discard some delayed events.",
+    );
+
+    const confirmedInstanceName = await prompt(
+      `Re-enter the instance name ("${opts.instance}") to confirm you want to pause it:`,
+    );
+
+    if (confirmedInstanceName !== opts.instance) {
+      console.log("Instance name did not match. Aborting.");
+      return;
+    }
+  }
+
+  const client = await getStatebackedClient(options);
+
+  await client.machineInstances.dangerously.setStatus(
+    opts.machine,
+    opts.instance,
+    { status: opts.status },
+  );
+
+  console.log("Set instance status");
 }
 
 function singleton<T>(
