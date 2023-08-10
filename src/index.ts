@@ -805,7 +805,13 @@ async function listKeys(opts: PaginationOptions, options: Command) {
       throw error;
     }
 
-    return data;
+    return data.map((k) => ({
+      id: toPrettyId("sbk", k.id),
+      createdAt: k.created_at,
+      name: k.name,
+      createdBy: toUserId(k.created_by),
+      scope: k.scope,
+    }));
   });
 }
 
