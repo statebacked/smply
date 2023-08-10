@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { writeObj } from "./utils.js";
+import { prompt, writeObj } from "./utils.js";
 
 export async function paginate<T>(
   opts: PaginationOptions,

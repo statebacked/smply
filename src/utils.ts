@@ -373,3 +373,15 @@ export function getSupabaseClient({
     },
   );
 }
+
+export function singleton<T>(
+  maybeArr: T | Array<T> | undefined | null,
+): T | undefined | null {
+  return typeof maybeArr === "undefined"
+    ? undefined
+    : maybeArr === null
+    ? null
+    : Array.isArray(maybeArr)
+    ? maybeArr[0]
+    : maybeArr;
+}
