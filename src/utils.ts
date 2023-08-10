@@ -1,6 +1,7 @@
+import * as zlib from "node:zlib";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import * as readline from "node:readline";
 import {
   createClient,
@@ -8,11 +9,26 @@ import {
 } from "@supabase/supabase-js";
 import { Database } from "./supabase.js";
 import { StateBackedClient } from "@statebacked/client";
+import { build } from "./build.js";
 
 export type SupabaseClient = RawSupabaseClient<Database>;
 
 export function writeObj(obj: any) {
   console.log(JSON.stringify(obj, null, 2));
+}
+
+export async function gzip(data: string) {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    zlib.gzip(data, (err, gzipped) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(
+        new Uint8Array(gzipped.buffer, gzipped.byteOffset, gzipped.byteLength),
+      );
+    });
+  });
 }
 
 export async function prompt(q: string): Promise<string> {
@@ -242,6 +258,41 @@ export async function doCreateOrg(s: SupabaseClient, orgName: string) {
   }
 
   return toOrgId(data.id);
+}
+
+export type BuildOpts = {
+  js?: string;
+  node?: string;
+  deno?: string;
+};
+
+export async function buildFromCommand(opts: BuildOpts) {
+  const count = [opts.js, opts.node, opts.deno].filter(Boolean).length;
+
+  if (count !== 1) {
+    throw new InvalidArgumentError(
+      "Exactly one of --js or --node must be specified",
+    );
+  }
+
+  const code = opts.js
+    ? {
+        fileName: path.basename(opts.js),
+        code: await fs.readFile(opts.js, { encoding: "utf8" }),
+      }
+    : opts.deno
+    ? await build(opts.deno, "deno")
+    : opts.node
+    ? await build(opts.node, "node")
+    : null;
+
+  if (!code) {
+    throw new InvalidArgumentError(
+      "Exactly one of --js or --node must be specified",
+    );
+  }
+
+  return code;
 }
 
 export async function getLoggedInSupabaseClient(cmd: Command) {

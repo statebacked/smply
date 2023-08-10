@@ -3,7 +3,6 @@
 import { Command, InvalidArgumentError } from "commander";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import * as zlib from "node:zlib";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
 import { LogEntry, errors } from "@statebacked/client";
@@ -17,6 +16,8 @@ import {
 } from "./paginator.js";
 import { addKeysCommands } from "./commands/keys.js";
 import {
+  BuildOpts,
+  buildFromCommand,
   defaultOrgFile,
   doCreateOrg,
   getApiURL,
@@ -25,6 +26,7 @@ import {
   getLoggedInSupabaseClient,
   getStatebackedClient,
   getSupabaseClient,
+  gzip,
   login,
   toMachineVersionId,
   toOrgId,
@@ -32,6 +34,10 @@ import {
   whileSuppressingOrgCreationPrompt,
   writeObj,
 } from "./utils.js";
+import {
+  addMachineVersionsCommands,
+  silencableCreateMachineVersion,
+} from "./commands/machine-versions.js";
 
 globalThis.fetch = fetch as any;
 globalThis.FormData = FormData as any;
@@ -143,37 +149,7 @@ async function main() {
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(deleteMachine);
 
-  const machineVersions = program
-    .command("machine-versions")
-    .description("Manage machine definition versions");
-
-  machineVersions
-    .command("create")
-    .description("Create a new version of a machine definition")
-    .requiredOption("-m, --machine <machine>", "Machine name (required)")
-    .requiredOption(
-      "-r, --version-reference <versionReference>",
-      "Name for the version. E.g. git commit sha or semantic version identifier.",
-    )
-    .option(
-      "-j, --js <file>",
-      "Path to the single javascript file that exports the machine definition. Exactly one of --js or --node must be specified.",
-    )
-    .option(
-      "-n, --node <file>",
-      "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. Exactly one of --js or --node must be specified.",
-    )
-    .option(
-      "-c, --make-current",
-      "Make this version the current version",
-      false,
-    )
-    .action(createMachineVersion);
-
-  withPaginationOptions(machineVersions.command("list"))
-    .description("List versions of a machine definition")
-    .requiredOption("-m, --machine <machine>", "Machine name (required)")
-    .action(listMachineVersions);
+  addMachineVersionsCommands(program);
 
   const migrations = program
     .command("migrations")
@@ -631,7 +607,7 @@ async function createMachine(
   };
 
   if (opts.js || opts.node || opts.deno) {
-    output.currentVersion = await _createMachineVersion(
+    output.currentVersion = await silencableCreateMachineVersion(
       {
         machine: opts.machine,
         versionReference: opts.versionReference ?? "0.0.1",
@@ -649,7 +625,7 @@ async function createMachine(
 }
 
 async function deleteMachine(
-  opts: BuildOpts & {
+  opts: {
     machine: string;
   },
   options: Command,
@@ -687,131 +663,6 @@ async function deleteMachine(
   }
 
   console.log("Deleted machine");
-}
-
-async function listMachineVersions(
-  opts: PaginationOptions & { machine: string },
-  options: Command,
-) {
-  const s = await getLoggedInSupabaseClient(options);
-
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("machine_versions")
-      .select(
-        `
-        id,
-        client_info,
-        created_at,
-        machines:machine_id!inner ( slug ),
-        current_machine_versions ( machine_id )
-    `,
-      )
-      .filter("machines.slug", "eq", opts.machine)
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map(
-      ({ id, client_info, created_at, current_machine_versions }) => ({
-        id: toMachineVersionId(id),
-        clientInfo: client_info,
-        createdAt: created_at,
-        isCurrent:
-          current_machine_versions && current_machine_versions.length > 0,
-      }),
-    );
-  });
-}
-
-async function createMachineVersion(
-  opts: BuildOpts & {
-    machine: string;
-    versionReference: string;
-    makeCurrent: boolean;
-  },
-  options: Command,
-) {
-  await _createMachineVersion(opts, options);
-}
-
-async function gzip(data: string) {
-  return new Promise<Uint8Array>((resolve, reject) => {
-    zlib.gzip(data, (err, gzipped) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(
-        new Uint8Array(gzipped.buffer, gzipped.byteOffset, gzipped.byteLength),
-      );
-    });
-  });
-}
-
-async function _createMachineVersion(
-  opts: BuildOpts & {
-    machine: string;
-    versionReference: string;
-    makeCurrent: boolean;
-    quiet?: boolean;
-  },
-  options: Command,
-) {
-  const code = await buildFromCommand(opts);
-  const gzippedCode = await gzip(code.code);
-
-  const client = await getStatebackedClient(options);
-
-  const version = await client.machineVersions.create(opts.machine, {
-    clientInfo: opts.versionReference,
-    makeCurrent: opts.makeCurrent,
-    gzippedCode,
-  });
-
-  if (!opts.quiet) {
-    writeObj(version);
-  }
-
-  return version;
-}
-
-type BuildOpts = {
-  js?: string;
-  node?: string;
-  deno?: string;
-};
-
-async function buildFromCommand(opts: BuildOpts) {
-  const count = [opts.js, opts.node, opts.deno].filter(Boolean).length;
-
-  if (count !== 1) {
-    throw new InvalidArgumentError(
-      "Exactly one of --js or --node must be specified",
-    );
-  }
-
-  const code = opts.js
-    ? {
-        fileName: path.basename(opts.js),
-        code: await fs.readFile(opts.js, { encoding: "utf8" }),
-      }
-    : opts.deno
-    ? await build(opts.deno, "deno")
-    : opts.node
-    ? await build(opts.node, "node")
-    : null;
-
-  if (!code) {
-    throw new InvalidArgumentError(
-      "Exactly one of --js or --node must be specified",
-    );
-  }
-
-  return code;
 }
 
 async function createMachineVersionMigration(
