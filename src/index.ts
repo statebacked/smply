@@ -1,43 +1,43 @@
 #!/usr/bin/env node
 
 import { Command, InvalidArgumentError } from "commander";
-import {
-  createClient,
-  SupabaseClient as RawSupabaseClient,
-} from "@supabase/supabase-js";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import * as readline from "node:readline";
 import * as zlib from "node:zlib";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
-import { LogEntry, StateBackedClient, errors } from "@statebacked/client";
-import { Database } from "./supabase.js";
+import { LogEntry, errors } from "@statebacked/client";
 import { build } from "./build.js";
 import { relativeTime } from "./relative-time.js";
+import {
+  PaginationOptions,
+  getSortOpts,
+  paginate,
+  withPaginationOptions,
+} from "./paginator.js";
+import { addKeysCommands } from "./commands/keys.js";
+import {
+  defaultOrgFile,
+  doCreateOrg,
+  getApiURL,
+  getEffectiveOrg,
+  getHeaders,
+  getLoggedInSupabaseClient,
+  getStatebackedClient,
+  getSupabaseClient,
+  login,
+  toMachineVersionId,
+  toOrgId,
+  toUserId,
+  whileSuppressingOrgCreationPrompt,
+  writeObj,
+} from "./utils.js";
 
 globalThis.fetch = fetch as any;
 globalThis.FormData = FormData as any;
 globalThis.Blob = Blob as any;
 
-type SupabaseClient = RawSupabaseClient<Database>;
-
 const VERSION = "0.1.11";
-
-const allowedScopes = [
-  "events.write",
-  "events.read",
-  "state.read",
-  "instances.read",
-  "instances.write",
-  "machines.read",
-  "machines.write",
-  "machine-versions.read",
-  "machine-versions.write",
-  "analytics.read",
-  "org.keys.write",
-  "org-members.write",
-];
 
 main();
 
@@ -378,34 +378,7 @@ async function main() {
     .description("Get the default organization.")
     .action(getDefaultOrg);
 
-  const keys = program.command("keys").description("Manage API keys");
-
-  keys
-    .command("create")
-    .description("Create a new API key")
-    .option(
-      "-u, --use [use]",
-      "Use for this key. One of 'production' or 'ci'. 'production' adds scopes necessary for creating instances of existing machines, sending events to instances, and reading machine instance state. 'ci' adds scopes necessary for creating machines and machine versions.",
-      "production",
-    )
-    .option(
-      "-s, --scopes [scopes...]",
-      `Comma-separated list of scopes to add to the key. If not specified, the default scopes for the use will be added. Valid scopes are: ${allowedScopes
-        .map((s) => `'${s}'`)
-        .join(", ")}`,
-    )
-    .requiredOption("-n, --name <name>", "Name for the key")
-    .action(createKey);
-
-  withPaginationOptions(
-    keys.command("list").description("List API keys"),
-  ).action(listKeys);
-
-  keys
-    .command("delete")
-    .description("Delete an API key")
-    .requiredOption("-k, --key <key>", "Key ID (required)")
-    .action(deleteKey);
+  addKeysCommands(program);
 
   const tokens = program
     .command("tokens")
@@ -473,83 +446,6 @@ async function main() {
     console.error(msg);
     process.exit(1);
   }
-}
-
-function withPaginationOptions(cmd: Command) {
-  return cmd
-    .option("-n, --count <count>", "Number of items to retrieve", "20")
-    .option("-o, --offset <offset>", "Offset to start listing from", "0")
-    .option(
-      "-d, --descending",
-      "Sort in descending order by creation date (default: sort in ascending order by creation date)",
-      false,
-    );
-}
-
-type PaginationOptions = {
-  count?: string;
-  offset?: string;
-  descending?: boolean;
-};
-
-function defaultOrgFile() {
-  return path.join(getSmplyConfigDir(), "default-org");
-}
-
-async function getStatebackedClient(options: Command) {
-  const apiHost = getApiURL(options);
-  const s = await getLoggedInSupabaseClient(options);
-  const accessToken = (await s.auth.getSession()).data?.session?.access_token;
-  const orgId = await getEffectiveOrg(options);
-
-  return new StateBackedClient(accessToken, { orgId, apiHost });
-}
-
-async function getHeaders(options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
-  const accessToken = (await s.auth.getSession()).data?.session?.access_token;
-  const org = await getEffectiveOrg(options);
-
-  return {
-    authorization: `Bearer ${accessToken}`,
-    ...(org ? { "x-statebacked-org-id": org } : {}),
-  };
-}
-
-async function getEffectiveOrg(options: Command) {
-  const optsOrg = options.optsWithGlobals().org;
-  if (optsOrg) {
-    return optsOrg;
-  }
-
-  try {
-    return await fs.readFile(defaultOrgFile(), { encoding: "utf8" });
-  } catch (_) {
-    return null;
-  }
-}
-
-const [whileSuppressingOrgCreationPrompt, isOrgCreationPromptSuppressed] =
-  (() => {
-    let suppressed = false;
-    async function whileSuppressingOrgCreationPrompt<T>(f: () => Promise<T>) {
-      suppressed = true;
-      try {
-        return await f();
-      } finally {
-        suppressed = false;
-      }
-    }
-
-    function isOrgCreationPromptSuppressed() {
-      return suppressed;
-    }
-
-    return [whileSuppressingOrgCreationPrompt, isOrgCreationPromptSuppressed];
-  })();
-
-function writeObj(obj: any) {
-  console.log(JSON.stringify(obj, null, 2));
 }
 
 async function acceptInvitation(
@@ -655,12 +551,6 @@ async function setDefaultOrg(_: { org: string }, options: Command) {
   console.log("Successfully set default org");
 }
 
-function getSortOpts(opts: PaginationOptions) {
-  return {
-    ascending: !opts.descending,
-  };
-}
-
 async function listOrgs(opts: PaginationOptions, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
 
@@ -697,50 +587,12 @@ async function listOrgs(opts: PaginationOptions, options: Command) {
   });
 }
 
-function toPrettyId(prefix: string, id: string | undefined) {
-  return (
-    id &&
-    prefix +
-      "_" +
-      Buffer.from(id.replace(/[-]/g, ""), "hex").toString("base64url")
-  );
-}
-
-const toOrgId = toPrettyId.bind(null, "org");
-const toMachineVersionId = toPrettyId.bind(null, "ver");
-const toUserId = toPrettyId.bind(null, "usr");
-
 async function createOrg(opts: { name: string }, options: Command) {
   const s = await getLoggedInSupabaseClient(options);
   const orgId = await doCreateOrg(s, opts.name);
   writeObj({
     orgId,
   });
-}
-
-async function doCreateOrg(s: SupabaseClient, orgName: string) {
-  // we need to insert and then select because we don't have permission to see the org until we're a member of it, which happens via trigger
-  const { error } = await s.from("orgs").insert({
-    name: orgName,
-  });
-  if (error) {
-    console.error(error.message);
-    throw error;
-  }
-
-  const { data, error: err } = await s
-    .from("orgs")
-    .select("id")
-    .filter("name", "eq", orgName)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-  if (err) {
-    console.error(err.message);
-    throw err;
-  }
-
-  return toOrgId(data.id);
 }
 
 async function generateToken(opts: {
@@ -760,117 +612,6 @@ async function generateToken(opts: {
   );
 
   console.log(jwt);
-}
-
-async function deleteKey(opts: { key: string }, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
-
-  const key = opts.key.replace(/^sbk_/, "");
-
-  const { error, count } = await s
-    .from("keys")
-    .delete({ count: "exact" })
-    .eq("id", key);
-  if (error) {
-    console.error("failed to delete key", error.message);
-    throw error;
-  }
-
-  if (count === 0) {
-    throw new Error("could not find key");
-  }
-
-  console.log("Successfully deleted key");
-}
-
-async function listKeys(opts: PaginationOptions, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
-
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("keys")
-      .select(
-        `
-      id,
-      created_at,
-      name,
-      created_by,
-      scope
-    `,
-      )
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map((k) => ({
-      id: toPrettyId("sbk", k.id),
-      createdAt: k.created_at,
-      name: k.name,
-      createdBy: toUserId(k.created_by),
-      scope: k.scope,
-    }));
-  });
-}
-
-async function createKey(
-  opts: { use?: string; scopes?: Array<string>; name: string },
-  options: Command,
-) {
-  if (!opts.use && (!opts.scopes || opts.scopes.length === 0)) {
-    throw new InvalidArgumentError(
-      "Either --use or --scopes must be specified",
-    );
-  }
-
-  if (opts.use !== "production" && opts.scopes && opts.scopes.length > 0) {
-    throw new InvalidArgumentError(
-      "Only one of --use or --scopes may be specified",
-    );
-  }
-
-  if (opts.use && !["production", "ci"].includes(opts.use)) {
-    throw new InvalidArgumentError("--use must be one of ['production', 'ci']");
-  }
-
-  if (opts.scopes) {
-    for (const scope of opts.scopes) {
-      if (!allowedScopes.includes(scope)) {
-        throw new InvalidArgumentError(
-          `invalid scope '${scope}'. Valid scopes are: ${allowedScopes.join(
-            ", ",
-          )}`,
-        );
-      }
-    }
-  }
-
-  const headers = await getHeaders(options);
-
-  const createKeyResponse = await fetch(`${getApiURL(options)}/keys`, {
-    headers,
-    method: "POST",
-    body: JSON.stringify({
-      name: opts.name,
-      use: !opts.scopes || opts.scopes.length === 0 ? opts.use : undefined,
-      scopes: opts.scopes,
-    }),
-  });
-  if (!createKeyResponse.ok) {
-    throw new Error(
-      `failed to create key (${
-        createKeyResponse.status
-      }): ${await createKeyResponse.text()}`,
-    );
-  }
-
-  const { id, key } = (await createKeyResponse.json()) as any;
-  console.log(
-    "Store this key safely now. You can create additional keys in the future but this key will never be shown again!",
-  );
-  writeObj({ id, key });
 }
 
 async function createMachine(
@@ -1693,46 +1434,6 @@ async function getLogs(opts: LogOpts, options: Command) {
   await printLogs(logs.logs, opts.clean);
 }
 
-async function paginate<T>(
-  opts: PaginationOptions,
-  getItems: (opts: { from: number; to: number }) => Promise<Array<T>>,
-) {
-  const pageSize = opts.count ? parseInt(opts.count, 10) : 20;
-  let from = opts.offset ? parseInt(opts.offset, 10) : 0;
-  let to = pageSize - 1;
-  const shouldPaginate = process.stdout.isTTY;
-  let more = true;
-  while (more) {
-    const page = await getItems({ from, to });
-    writeObj(page);
-
-    if (!shouldPaginate || page.length < pageSize) {
-      more = false;
-    } else {
-      from += pageSize;
-      to += pageSize;
-      const quit = await prompt("Press enter for more (q + Enter to quit)...");
-      if (quit === "q") {
-        more = false;
-      }
-    }
-  }
-}
-
-async function prompt(q: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(q + " ", (res) => {
-      rl.close();
-      resolve(res);
-    });
-  });
-}
-
 async function whoami(_: unknown, options: Command) {
   const s = getSupabaseClient({ store: false });
   const { data, error } = await s.auth.getUser();
@@ -1745,201 +1446,4 @@ async function whoami(_: unknown, options: Command) {
     userId: data.user.id,
     defaultOrg: await getEffectiveOrg(options),
   });
-}
-
-async function login(opts: { store: boolean }) {
-  const shouldStore = opts.store;
-  const s = getSupabaseClient({ store: shouldStore });
-  const email = await prompt("What is your email address?");
-  if (!email) {
-    console.error("No email provided");
-    process.exit(1);
-  }
-  const signIn = await s.auth.signInWithOtp({ email });
-  if (signIn.error) {
-    console.error("Failed to send verification code", signIn.error.message);
-    process.exit(1);
-  }
-  const magicToken = await prompt(
-    "Check your email and paste the verification code here:",
-  );
-  if (!magicToken) {
-    console.error("No token provided");
-    process.exit(1);
-  }
-  const sess = await verifyMagicLinkOrSignup(s, email, magicToken);
-  if (sess.error) {
-    console.error("Failed to log in", sess.error.message);
-    return;
-  }
-
-  if (shouldStore) {
-    try {
-      await fs.unlink(defaultOrgFile());
-    } catch (e) {
-      if (e.code !== "ENOENT") {
-        console.error(
-          `failed to remove default org file at '${defaultOrgFile()}'. remove manually to avoid errors.`,
-          e.message,
-        );
-      }
-    }
-  }
-
-  if (!isOrgCreationPromptSuppressed()) {
-    await createOrgIfNecessary(s);
-  }
-
-  if (!shouldStore) {
-    console.log(sess?.data.session?.access_token);
-  }
-}
-
-async function createOrgIfNecessary(s: SupabaseClient) {
-  const { count, error } = await s
-    .from("orgs")
-    .select(undefined, { count: "exact" });
-
-  if (error) {
-    console.error("failed to determine org membership", error.message);
-    console.error(
-      "run `smply orgs list` to see your orgs or `smply orgs create` to create one",
-    );
-    return;
-  }
-
-  if (count === 0) {
-    await promptForOrgCreation(s);
-  }
-}
-
-async function verifyMagicLinkOrSignup(
-  s: SupabaseClient,
-  email: string,
-  magicToken: string,
-) {
-  const sess = await s.auth.verifyOtp({
-    type: "magiclink",
-    email,
-    token: magicToken,
-  });
-
-  if (!sess.error) {
-    return sess;
-  }
-
-  // try to sign up
-  const signupSess = await s.auth.verifyOtp({
-    type: "signup",
-    email,
-    token: magicToken,
-  });
-
-  return signupSess;
-}
-
-async function promptForOrgCreation(s: SupabaseClient) {
-  const shouldCreateOrg = await prompt(
-    "You don't belong to any organizations yet. You'll need one to create machines. Would you like to create one? (y/n)",
-  );
-  if (shouldCreateOrg?.toLowerCase() !== "y") {
-    console.log("You can create a new org later with `smply orgs create`");
-    return;
-  }
-
-  const orgName = await prompt("What would you like to call your org?");
-  if (orgName) {
-    const orgId = await doCreateOrg(s, orgName);
-    console.log(
-      "Created org. You can now create machines with `smply machines create`. Manage your org billing with `smply billing`",
-    );
-    writeObj({ orgId });
-  }
-}
-
-async function getLoggedInSupabaseClient(cmd: Command) {
-  const s = getSupabaseClient({
-    store: true,
-    ...cmd.optsWithGlobals(),
-  });
-  const sess = await s.auth.getSession();
-  if (!sess.data.session) {
-    console.error("Could not find credentials. Log in or sign up.");
-    await login({ store: true });
-    const s = getSupabaseClient({
-      store: true,
-      ...cmd.optsWithGlobals(),
-    });
-    const session = await s.auth.getSession();
-    if (!session.data.session) {
-      console.error("Failed to log in");
-      process.exit(1);
-    }
-    return s;
-  }
-  return s;
-}
-
-function getSmplyConfigDir() {
-  return path.join(process.env.HOME ?? ".", ".smply");
-}
-
-function getSupabaseClient({
-  accessToken,
-  store,
-}: {
-  accessToken?: string;
-  store?: boolean;
-}) {
-  const projectRef = "wzmjedymhlqansmxtsmo";
-  const expectedKey = `sb-${projectRef}-auth-token`;
-  const tokenFile = path.join(getSmplyConfigDir(), "credentials");
-
-  return createClient<Database>(
-    `https://${projectRef}.supabase.co`,
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6bWplZHltaGxxYW5zbXh0c21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODY5MzExMTEsImV4cCI6MjAwMjUwNzExMX0.1DILVKbYW7lp_lKy5hHaKh9bHLe5bP1OhErCkjW2MJg",
-    {
-      auth: {
-        storage: {
-          getItem: async (key: string) => {
-            if (key === expectedKey) {
-              if (accessToken) {
-                return JSON.stringify({ accessToken });
-              }
-
-              try {
-                const item = await fs.readFile(tokenFile, { encoding: "utf8" });
-                return item;
-              } catch (e) {
-                if (e.code === "ENOENT") {
-                  return null;
-                }
-                throw e;
-              }
-            }
-            return null;
-          },
-          removeItem: (_key: string) => {
-            return;
-          },
-          setItem: async (key: string, value: string) => {
-            if (key === expectedKey && store) {
-              await fs.mkdir(path.dirname(tokenFile), {
-                recursive: true,
-                mode: 0o700,
-              });
-              return fs.writeFile(tokenFile, value, {
-                encoding: "utf8",
-                mode: 0o600,
-              });
-            }
-          },
-        },
-      },
-    },
-  );
-}
-
-function getApiURL(options: Command) {
-  return options.optsWithGlobals().apiUrl ?? "https://api.statebacked.dev";
 }
