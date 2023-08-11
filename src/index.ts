@@ -4,8 +4,6 @@ import { Command, InvalidArgumentError } from "commander";
 import * as fs from "node:fs/promises";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
-import { LogEntry } from "@statebacked/client";
-import { relativeTime } from "./relative-time.js";
 import {
   PaginationOptions,
   getSortOpts,
@@ -14,17 +12,13 @@ import {
 } from "./paginator.js";
 import { addKeysCommands } from "./commands/keys.js";
 import {
-  BuildOpts,
-  buildFromCommand,
   defaultOrgFile,
   doCreateOrg,
   getApiURL,
   getEffectiveOrg,
   getHeaders,
   getLoggedInSupabaseClient,
-  getStatebackedClient,
   getSupabaseClient,
-  gzip,
   login,
   singleton,
   toOrgId,
@@ -37,6 +31,7 @@ import { addMachineInstancesCommands } from "./commands/instances.js";
 import { addMigrationsCommands } from "./commands/migrations.js";
 import { addLogsCommands } from "./commands/logs.js";
 import { addIdentityProviderCommands } from "./commands/identity-providers.js";
+import { addTokenProviderCommands } from "./commands/token-providers.js";
 
 globalThis.fetch = fetch as any;
 globalThis.FormData = FormData as any;
@@ -183,6 +178,8 @@ async function main() {
     .action(acceptInvitation);
 
   addIdentityProviderCommands(program);
+
+  addTokenProviderCommands(program);
 
   try {
     await program.parseAsync();
