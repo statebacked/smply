@@ -36,6 +36,7 @@ import { addMachineCommands } from "./commands/machines.js";
 import { addMachineInstancesCommands } from "./commands/instances.js";
 import { addMigrationsCommands } from "./commands/migrations.js";
 import { addLogsCommands } from "./commands/logs.js";
+import { addIdentityProviderCommands } from "./commands/identity-providers.js";
 
 globalThis.fetch = fetch as any;
 globalThis.FormData = FormData as any;
@@ -180,6 +181,8 @@ async function main() {
       "Invitation code from the email you received (required)",
     )
     .action(acceptInvitation);
+
+  addIdentityProviderCommands(program);
 
   try {
     await program.parseAsync();
