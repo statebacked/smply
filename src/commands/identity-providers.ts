@@ -53,6 +53,18 @@ export function addIdentityProviderCommands(cmd: Command) {
     .action(upsertSupabaseIdentityProvider);
 
   idps
+    .command("upsert-auth0")
+    .description(
+      "Create or update an identity provider configuration for Auth0",
+    )
+    .requiredOption("-d, --domain <domain>", "Auth0 application domain")
+    .requiredOption(
+      "-m, --mapping <mapping>",
+      "JSON object mapping identity provider claims to the set of claims available for token providers to add to State Backed tokens. The value of any object key that ends in '.$' will be treated as a JSON path expression indexing into the claims of the identity provider token. So { \"sub.$\" \"$.sub\" } will extract the sub claim from the identity provider token and name it 'sub'.",
+    )
+    .action(upsertAuth0IdentityProvider);
+
+  idps
     .command("delete")
     .description("Delete an identity provider configuration")
     .option(
@@ -64,6 +76,27 @@ export function addIdentityProviderCommands(cmd: Command) {
       "Issuer for the identity provider. (--audience and/or --issuer required)",
     )
     .action(deleteIdentityProvider);
+}
+
+async function upsertAuth0IdentityProvider(
+  opts: {
+    domain: string;
+    mapping: string;
+  },
+  options: Command,
+) {
+  const domain = new URL(opts.domain).hostname;
+
+  return upsertIdentityProvider(
+    {
+      audience: `https://${domain}/api/v2/`,
+      issuer: `https://${domain}/`,
+      algorithm: ["RS256"],
+      jwksUrl: `https://${domain}/.well-known/jwks.json`,
+      mapping: opts.mapping,
+    },
+    options,
+  );
 }
 
 async function upsertSupabaseIdentityProvider(
