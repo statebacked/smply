@@ -3,6 +3,7 @@ import {
   PaginationOptions,
   getSortOpts,
   paginate,
+  paginateWithCursor,
   withPaginationOptions,
 } from "../paginator.js";
 import {
@@ -43,7 +44,8 @@ export function addMachineVersionsCommands(cmd: Command) {
     )
     .action(createMachineVersion);
 
-  withPaginationOptions(machineVersions.command("list"))
+  machineVersions
+    .command("list")
     .description("List versions of a machine definition")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(listMachineVersions);
@@ -53,38 +55,12 @@ async function listMachineVersions(
   opts: PaginationOptions & { machine: string },
   options: Command,
 ) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("machine_versions")
-      .select(
-        `
-        id,
-        client_info,
-        created_at,
-        machines:machine_id!inner ( slug ),
-        current_machine_versions ( machine_id )
-    `,
-      )
-      .filter("machines.slug", "eq", opts.machine)
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map(
-      ({ id, client_info, created_at, current_machine_versions }) => ({
-        id: toMachineVersionId(id),
-        clientInfo: client_info,
-        createdAt: created_at,
-        isCurrent:
-          current_machine_versions && current_machine_versions.length > 0,
-      }),
-    );
-  });
+  await paginateWithCursor(
+    (cursor) => client.machineVersions.list(opts.machine, { cursor }),
+    (page) => page.versions,
+  );
 }
 
 async function createMachineVersion(
