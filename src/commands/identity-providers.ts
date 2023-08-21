@@ -1,5 +1,6 @@
 import { Command, InvalidArgumentError } from "commander";
 import { getStatebackedClient, prompt } from "../utils.js";
+import { paginateWithCursor } from "../paginator.js";
 
 export function addIdentityProviderCommands(cmd: Command) {
   const idps = cmd
@@ -38,6 +39,11 @@ export function addIdentityProviderCommands(cmd: Command) {
       "The URL of the JWKS endpoint to use to validate the identity provider token (--key, --base64-key or --jwks-url required)",
     )
     .action(upsertIdentityProvider);
+
+  idps
+    .command("list")
+    .description("List identity provider configurations")
+    .action(listIdentityProviders);
 
   idps
     .command("upsert-supabase")
@@ -92,6 +98,15 @@ export function addIdentityProviderCommands(cmd: Command) {
       "Issuer for the identity provider. (--audience and/or --issuer required)",
     )
     .action(deleteIdentityProvider);
+}
+
+async function listIdentityProviders(_: any, options: Command) {
+  const client = await getStatebackedClient(options);
+
+  paginateWithCursor(
+    (cursor) => client.identityProviders.list({ cursor }),
+    (page) => page.idps,
+  );
 }
 
 async function upsertCognitoIdentityProvider(
