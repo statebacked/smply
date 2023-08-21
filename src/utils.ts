@@ -53,13 +53,20 @@ export function defaultOrgFile() {
   return path.join(getSmplyConfigDir(), "default-org");
 }
 
-export async function getStatebackedClient(options: Command) {
+export async function getStatebackedClient(
+  options: Command,
+  opts?: { authContext?: any; token?: string },
+) {
   const apiHost = getApiURL(options);
   const s = await getLoggedInSupabaseClient(options);
   const accessToken = (await s.auth.getSession()).data?.session?.access_token;
   const orgId = await getEffectiveOrg(options);
 
-  return new StateBackedClient(accessToken, { orgId, apiHost });
+  return new StateBackedClient(opts?.token ?? accessToken, {
+    orgId,
+    apiHost,
+    actAs: opts?.authContext,
+  });
 }
 
 export async function getHeaders(options: Command) {

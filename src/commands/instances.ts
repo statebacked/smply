@@ -171,29 +171,20 @@ async function sendEventToMachineInstance(
     }
   })();
 
-  const eventResponse = await fetch(
-    `${getApiURL(options)}/machines/${opts.machine}/i/${opts.instance}/events`,
+  const client = await getStatebackedClient(options, {
+    authContext: JSON.parse(opts.authContext),
+    token: opts.token,
+  });
+
+  const response = await client.machineInstances.sendEvent(
+    opts.machine,
+    opts.instance,
     {
-      headers: {
-        ...(await getHeaders(options)),
-        ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
-        ...(opts.authContext ? { "x-statebacked-act": opts.authContext } : {}),
-      },
-      method: "POST",
-      body: JSON.stringify({
-        event,
-      }),
+      event,
     },
   );
-  if (!eventResponse.ok) {
-    throw new Error(
-      `failed to send event (${
-        eventResponse.status
-      }): ${await eventResponse.text()}`,
-    );
-  }
 
-  writeObj(await eventResponse.json());
+  writeObj(response);
 }
 
 async function createMachineInstance(
