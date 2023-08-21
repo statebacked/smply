@@ -103,7 +103,7 @@ export function addIdentityProviderCommands(cmd: Command) {
 async function listIdentityProviders(_: any, options: Command) {
   const client = await getStatebackedClient(options);
 
-  paginateWithCursor(
+  await paginateWithCursor(
     (cursor) => client.identityProviders.list({ cursor }),
     (page) => page.idps,
   );

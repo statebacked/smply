@@ -1,15 +1,11 @@
 import { Command, InvalidArgumentError } from "commander";
 import {
   PaginationOptions,
-  getSortOpts,
-  paginate,
   paginateWithCursor,
   withPaginationOptions,
 } from "../paginator.js";
 import {
   BuildOpts,
-  getApiURL,
-  getHeaders,
   getLoggedInSupabaseClient,
   getStatebackedClient,
   prompt,
@@ -17,7 +13,6 @@ import {
   toMachineVersionId,
   writeObj,
 } from "../utils.js";
-import { ListMachineInstanceTransitionsResponse } from "@statebacked/client";
 
 export function addMachineInstancesCommands(cmd: Command) {
   const instances = cmd
@@ -303,8 +298,8 @@ async function listInstanceTransitions(
 ) {
   const client = await getStatebackedClient(options);
 
-  paginateWithCursor(
-    (cursor?: string) =>
+  await paginateWithCursor(
+    (cursor) =>
       client.machineInstances.listTransitions(opts.machine, opts.instance, {
         cursor,
       }),
@@ -317,8 +312,9 @@ async function listMachineInstances(
   options: Command,
 ) {
   const client = await getStatebackedClient(options);
-  paginateWithCursor(
-    (cursor?: string) =>
+
+  await paginateWithCursor(
+    (cursor) =>
       client.machineInstances.list(opts.machine, {
         cursor,
       }),

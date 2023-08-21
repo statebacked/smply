@@ -1,10 +1,16 @@
 import { Command, InvalidArgumentError } from "commander";
 import { getStatebackedClient, prompt } from "../utils.js";
+import { paginateWithCursor } from "../paginator.js";
 
 export function addTokenProviderCommands(cmd: Command) {
   const tokenProviders = cmd
     .command("token-providers")
     .description("Manage token provider configurations for token exchange");
+
+  tokenProviders
+    .command("list")
+    .description("List token provider configurations")
+    .action(listTokenProviders);
 
   tokenProviders
     .command("upsert")
@@ -31,6 +37,15 @@ export function addTokenProviderCommands(cmd: Command) {
       "The service name used to identify this token provider. (required)",
     )
     .action(deleteIdentityProvider);
+}
+
+async function listTokenProviders(_: any, options: Command) {
+  const s = await getStatebackedClient(options);
+
+  await paginateWithCursor(
+    (cursor) => s.tokenProviders.list({ cursor }),
+    (page) => page.tokenProviders,
+  );
 }
 
 async function upsertTokenProvider(
