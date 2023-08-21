@@ -3,6 +3,7 @@ import {
   PaginationOptions,
   getSortOpts,
   paginate,
+  paginateWithCursor,
   withPaginationOptions,
 } from "../paginator.js";
 import {
@@ -16,6 +17,7 @@ import {
   toMachineVersionId,
   writeObj,
 } from "../utils.js";
+import { ListMachineInstanceTransitionsResponse } from "@statebacked/client";
 
 export function addMachineInstancesCommands(cmd: Command) {
   const instances = cmd
@@ -207,31 +209,18 @@ async function createMachineInstance(
     );
   }
 
-  const instanceCreationResponse = await fetch(
-    `${getApiURL(options)}/machines/${opts.machine}`,
-    {
-      headers: {
-        ...(await getHeaders(options)),
-        ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
-        ...(opts.authContext ? { "x-statebacked-act": opts.authContext } : {}),
-      },
-      method: "POST",
-      body: JSON.stringify({
-        slug: opts.instance,
-        context: opts.context && JSON.parse(opts.context),
-        machineVersionId: opts.version,
-      }),
-    },
-  );
-  if (!instanceCreationResponse.ok) {
-    throw new Error(
-      `failed to create instance (${
-        instanceCreationResponse.status
-      }): ${await instanceCreationResponse.text()}`,
-    );
-  }
+  const client = await getStatebackedClient(options, {
+    authContext: JSON.parse(opts.authContext),
+    token: opts.token,
+  });
 
-  writeObj(await instanceCreationResponse.json());
+  const result = await client.machineInstances.create(opts.machine, {
+    slug: opts.instance,
+    context: opts.context && JSON.parse(opts.context),
+    machineVersionId: opts.version,
+  });
+
+  writeObj(result);
 }
 
 async function getMachineInstance(
@@ -312,123 +301,35 @@ async function listInstanceTransitions(
   opts: PaginationOptions & { machine: string; instance: string },
   options: Command,
 ) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  const { data: machineData, error: machineError } = await s
-    .from("machines")
-    .select("id, org_id")
-    .filter("slug", "eq", opts.machine)
-    .single();
-
-  if (machineError) {
-    if (machineError.code === "PGRST116") {
-      console.error(`Machine '${opts.machine}' not found`);
-      return;
-    }
-
-    console.error("failed to retrieve machine", machineError.message);
-    throw machineError;
-  }
-
-  const { id: machineId, org_id: orgId } = machineData;
-
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("machine_transitions")
-      .select(
-        `
-          created_at,
-          state,
-          machine_instances:machine_instance_id!inner (
-            extended_slug
-          )
-        `,
-      )
-      .filter(
-        "machine_instances.extended_slug",
-        "eq",
-        `${orgId}/${machineId}/${opts.instance}`,
-      )
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map((transition) => {
-      return {
-        createdAt: transition.created_at,
-        state: (transition.state as any)?.value,
-        event: (transition.state as any)?.event.data,
-      };
-    });
-  });
+  paginateWithCursor(
+    (cursor?: string) =>
+      client.machineInstances.listTransitions(opts.machine, opts.instance, {
+        cursor,
+      }),
+    (page) => page.transitions,
+  );
 }
 
 async function listMachineInstances(
   opts: PaginationOptions & { machine: string },
   options: Command,
 ) {
-  const s = await getLoggedInSupabaseClient(options);
-
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("machine_instances")
-      .select(
-        `
-          extended_slug,
-          created_at,
-          machine_instance_state (
-              machine_transitions (
-                  created_at,
-                  state
-              )
-          ),
-          machine_versions:machine_version_id!inner (
-            id,
-            client_info,
-            machines:machine_id!inner (
-              slug
-            )
-          )
-        `,
-      )
-      .filter("machine_versions.machines.slug", "eq", opts.machine)
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map((inst) => {
-      const latestTransition = singleton(
-        singleton(inst.machine_instance_state)?.machine_transitions,
-      );
-      // supabase typing seems to get confused by inner joins
-      const machineVersion = singleton(inst.machine_versions as any) as
-        | {
-            id: string;
-            client_info: string;
-            machines: { slug: string };
-          }
-        | undefined;
-
-      return {
-        name: inst.extended_slug.split("/", 3)[2],
-        createdAt: inst.created_at,
-        latestTransition: {
-          createdAt: latestTransition?.created_at,
-          state: (latestTransition?.state as any)?.value,
-          event: (latestTransition?.state as any)?.event.data,
-        },
-        machineVersionId: toMachineVersionId(machineVersion?.id),
-        machineVersionReference: machineVersion?.client_info,
-        machineName: singleton(machineVersion?.machines)?.slug,
-      };
-    });
-  });
+  const client = await getStatebackedClient(options);
+  paginateWithCursor(
+    (cursor?: string) =>
+      client.machineInstances.list(opts.machine, {
+        cursor,
+      }),
+    (page) =>
+      page.instances.map((i) => ({
+        name: i.slug,
+        createdAt: i.createdAt,
+        machineVersion: i.machineVersion,
+        status: i.status,
+      })),
+  );
 }
 
 async function deleteMachineInstance(
