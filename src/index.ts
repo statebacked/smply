@@ -18,6 +18,7 @@ import {
   getEffectiveOrg,
   getHeaders,
   getLoggedInSupabaseClient,
+  getStatebackedClient,
   getSupabaseClient,
   login,
   singleton,
@@ -258,20 +259,10 @@ async function sendInvitation(
 }
 
 async function launchBilling(_: unknown, options: Command) {
-  const headers = await getHeaders(options);
+  const client = await getStatebackedClient(options);
 
-  const res = await fetch(`${getApiURL(options)}/billing`, {
-    method: "GET",
-    headers,
-  });
+  const { url } = await client.billing.get();
 
-  if (!res.ok) {
-    throw new Error(
-      `failed to launch billing (${res.status}): ${await res.text()}`,
-    );
-  }
-
-  const { url } = (await res.json()) as any;
   console.log(url);
 }
 
