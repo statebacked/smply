@@ -19,9 +19,9 @@ export function addMachineInstancesCommands(cmd: Command) {
     .command("instances")
     .description("Manage state machine instances");
 
-  withPaginationOptions(
-    instances.command("list").description("List machine instances"),
-  )
+  instances
+    .command("list")
+    .description("List machine instances")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(listMachineInstances);
 
@@ -85,7 +85,8 @@ export function addMachineInstancesCommands(cmd: Command) {
     )
     .action(setDesiredMachineInstanceVersion);
 
-  withPaginationOptions(instances.command("list-transitions"))
+  instances
+    .command("list-transitions")
     .description("List the transitions for this instance")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption("-i, --instance <instance>", "Instance name (required)")

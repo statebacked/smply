@@ -9,12 +9,7 @@ import {
   toUserId,
   writeObj,
 } from "../utils.js";
-import {
-  PaginationOptions,
-  getSortOpts,
-  paginate,
-  withPaginationOptions,
-} from "../paginator.js";
+import { PaginationOptions, paginateWithCursor } from "../paginator.js";
 import { silencableCreateMachineVersion } from "./machine-versions.js";
 import { errors } from "@statebacked/client";
 
@@ -23,9 +18,10 @@ export function addMachineCommands(cmd: Command) {
     .command("machines")
     .description("Manage state machine definitions");
 
-  withPaginationOptions(
-    machines.command("list").description("List machine definitions"),
-  ).action(listMachines);
+  machines
+    .command("list")
+    .description("List machine definitions")
+    .action(listMachines);
 
   machines
     .command("get")
@@ -121,51 +117,17 @@ async function getMachine(opts: { machine: string }, options: Command) {
 }
 
 async function listMachines(opts: PaginationOptions, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("machines")
-      .select(
-        `
-        slug,
-        created_at,
-        created_by,
-        current_machine_versions (
-            machine_versions (
-                id,
-                client_info,
-                created_at
-            )
-        )
-    `,
-      )
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map(
-      ({ slug, created_at, created_by, current_machine_versions }) => {
-        const machineVersion = singleton(
-          singleton(current_machine_versions)?.machine_versions,
-        );
-
-        return {
-          name: slug,
-          createdAt: created_at,
-          createdBy: toUserId(created_by),
-          currentVersion: machineVersion && {
-            id: toMachineVersionId(machineVersion.id),
-            createdAt: machineVersion.created_at,
-            clientInfo: machineVersion.client_info,
-          },
-        };
-      },
-    );
-  });
+  await paginateWithCursor(
+    (cursor) => client.machines.list({ cursor }),
+    (page) =>
+      page.machines.map((m) => ({
+        name: m.slug,
+        createdAt: m.createdAt,
+        currentVersion: m.currentVersion,
+      })),
+  );
 }
 
 async function createMachine(
