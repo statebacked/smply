@@ -16,7 +16,6 @@ import {
   getApiURL,
   getEffectiveOrg,
   getHeaders,
-  getLoggedInSupabaseClient,
   getStatebackedClient,
   getSupabaseClient,
   login,
@@ -301,8 +300,8 @@ async function listOrgs(opts: PaginationOptions, options: Command) {
 }
 
 async function createOrg(opts: { name: string }, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
-  const orgId = await doCreateOrg(s, opts.name);
+  const client = await getStatebackedClient(options);
+  const orgId = await doCreateOrg(client, opts.name);
   writeObj({
     orgId,
   });

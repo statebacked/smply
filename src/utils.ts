@@ -132,7 +132,7 @@ const [whileSuppressingOrgCreationPrompt, isOrgCreationPromptSuppressed] =
 
 export { whileSuppressingOrgCreationPrompt };
 
-export async function login(opts: { store: boolean }) {
+export async function login(opts: { store: boolean }, cmd: Command) {
   const shouldStore = opts.store;
   const s = getSupabaseClient({ store: shouldStore });
   const email = await prompt("What is your email address?");
@@ -171,8 +171,10 @@ export async function login(opts: { store: boolean }) {
     }
   }
 
+  const client = await getStatebackedClient(cmd);
+
   if (!isOrgCreationPromptSuppressed()) {
-    await createOrgIfNecessary(s);
+    await createOrgIfNecessary(client);
   }
 
   if (!shouldStore) {
@@ -180,21 +182,25 @@ export async function login(opts: { store: boolean }) {
   }
 }
 
-async function createOrgIfNecessary(s: SupabaseClient) {
-  const { count, error } = await s
-    .from("orgs")
-    .select(undefined, { count: "exact" });
+async function createOrgIfNecessary(client: StateBackedClient) {
+  const orgs = await (async () => {
+    try {
+      return await client.orgs.list();
+    } catch (e) {
+      console.error("failed to determine org membership", e.message);
+      console.error(
+        "run `smply orgs list` to see your orgs or `smply orgs create` to create one",
+      );
+      return undefined;
+    }
+  })();
 
-  if (error) {
-    console.error("failed to determine org membership", error.message);
-    console.error(
-      "run `smply orgs list` to see your orgs or `smply orgs create` to create one",
-    );
+  if (typeof orgs === "undefined") {
     return;
   }
 
-  if (count === 0) {
-    await promptForOrgCreation(s);
+  if (orgs.orgs.length === 0) {
+    await promptForOrgCreation(client);
   }
 }
 
@@ -223,7 +229,7 @@ async function verifyMagicLinkOrSignup(
   return signupSess;
 }
 
-async function promptForOrgCreation(s: SupabaseClient) {
+async function promptForOrgCreation(client: StateBackedClient) {
   const shouldCreateOrg = await prompt(
     "You don't belong to any organizations yet. You'll need one to create machines. Would you like to create one? (y/n)",
   );
@@ -234,7 +240,7 @@ async function promptForOrgCreation(s: SupabaseClient) {
 
   const orgName = await prompt("What would you like to call your org?");
   if (orgName) {
-    const orgId = await doCreateOrg(s, orgName);
+    const orgId = await doCreateOrg(client, orgName);
     console.log(
       "Created org. You can now create machines with `smply machines create`. Manage your org billing with `smply billing`",
     );
@@ -242,29 +248,10 @@ async function promptForOrgCreation(s: SupabaseClient) {
   }
 }
 
-export async function doCreateOrg(s: SupabaseClient, orgName: string) {
-  // we need to insert and then select because we don't have permission to see the org until we're a member of it, which happens via trigger
-  const { error } = await s.from("orgs").insert({
-    name: orgName,
-  });
-  if (error) {
-    console.error(error.message);
-    throw error;
-  }
+export async function doCreateOrg(client: StateBackedClient, orgName: string) {
+  const { id } = await client.orgs.create({ name: orgName });
 
-  const { data, error: err } = await s
-    .from("orgs")
-    .select("id")
-    .filter("name", "eq", orgName)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-  if (err) {
-    console.error(err.message);
-    throw err;
-  }
-
-  return toOrgId(data.id);
+  return id;
 }
 
 export type BuildOpts = {
@@ -310,7 +297,7 @@ export async function getLoggedInSupabaseClient(cmd: Command) {
   const sess = await s.auth.getSession();
   if (!sess.data.session) {
     console.error("Could not find credentials. Log in or sign up.");
-    await login({ store: true });
+    await login({ store: true }, cmd);
     const s = getSupabaseClient({
       store: true,
       ...cmd.optsWithGlobals(),
