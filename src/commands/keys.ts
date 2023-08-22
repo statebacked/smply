@@ -1,20 +1,6 @@
 import { Command, InvalidArgumentError } from "commander";
-import {
-  PaginationOptions,
-  getSortOpts,
-  paginate,
-  paginateWithCursor,
-  withPaginationOptions,
-} from "../paginator.js";
-import {
-  getApiURL,
-  getHeaders,
-  getLoggedInSupabaseClient,
-  getStatebackedClient,
-  toKeyId,
-  toUserId,
-  writeObj,
-} from "../utils.js";
+import { PaginationOptions, paginateWithCursor } from "../paginator.js";
+import { getStatebackedClient, writeObj } from "../utils.js";
 
 const allowedScopes = [
   "events.write",
@@ -51,9 +37,7 @@ export function addKeysCommands(cmd: Command) {
     .requiredOption("-n, --name <name>", "Name for the key")
     .action(createKey);
 
-  withPaginationOptions(
-    keys.command("list").description("List API keys"),
-  ).action(listKeys);
+  keys.command("list").description("List API keys").action(listKeys);
 
   keys
     .command("delete")
@@ -118,22 +102,9 @@ async function createKey(
 }
 
 async function deleteKey(opts: { key: string }, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  const key = opts.key.replace(/^sbk_/, "");
-
-  const { error, count } = await s
-    .from("keys")
-    .delete({ count: "exact" })
-    .eq("id", key);
-  if (error) {
-    console.error("failed to delete key", error.message);
-    throw error;
-  }
-
-  if (count === 0) {
-    throw new Error("could not find key");
-  }
+  await client.keys.delete(opts.key);
 
   console.log("Successfully deleted key");
 }

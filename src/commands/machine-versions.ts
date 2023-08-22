@@ -1,15 +1,7 @@
 import { Command } from "commander";
+import { PaginationOptions, paginateWithCursor } from "../paginator.js";
 import {
-  PaginationOptions,
-  getSortOpts,
-  paginate,
-  paginateWithCursor,
-  withPaginationOptions,
-} from "../paginator.js";
-import {
-  getLoggedInSupabaseClient,
   getStatebackedClient,
-  toMachineVersionId,
   writeObj,
   gzip,
   BuildOpts,

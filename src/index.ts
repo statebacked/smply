@@ -4,11 +4,7 @@ import { Command, InvalidArgumentError } from "commander";
 import * as fs from "node:fs/promises";
 import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
-import {
-  PaginationOptions,
-  paginateWithCursor,
-  withPaginationOptions,
-} from "./paginator.js";
+import { PaginationOptions, paginateWithCursor } from "./paginator.js";
 import { addKeysCommands } from "./commands/keys.js";
 import {
   defaultOrgFile,
@@ -98,9 +94,7 @@ async function main() {
 
   const orgs = program.command("orgs").description("Manage organizations");
 
-  withPaginationOptions(
-    orgs.command("list").description("List organizations"),
-  ).action(listOrgs);
+  orgs.command("list").description("List organizations").action(listOrgs);
 
   orgs
     .command("create")
