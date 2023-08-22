@@ -1,14 +1,6 @@
 import { Command, InvalidArgumentError } from "commander";
-import {
-  PaginationOptions,
-  paginateWithCursor,
-} from "../paginator.js";
-import {
-  BuildOpts,
-  getStatebackedClient,
-  prompt,
-  writeObj,
-} from "../utils.js";
+import { PaginationOptions, paginateWithCursor } from "../paginator.js";
+import { BuildOpts, getStatebackedClient, prompt, writeObj } from "../utils.js";
 
 export function addMachineInstancesCommands(cmd: Command) {
   const instances = cmd

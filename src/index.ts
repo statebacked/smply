@@ -6,8 +6,7 @@ import fetch, { FormData, Blob } from "node-fetch";
 import { signToken } from "@statebacked/token";
 import {
   PaginationOptions,
-  getSortOpts,
-  paginate,
+  paginateWithCursor,
   withPaginationOptions,
 } from "./paginator.js";
 import { addKeysCommands } from "./commands/keys.js";
@@ -21,8 +20,6 @@ import {
   getStatebackedClient,
   getSupabaseClient,
   login,
-  singleton,
-  toOrgId,
   whileSuppressingOrgCreationPrompt,
   writeObj,
 } from "./utils.js";
@@ -295,39 +292,12 @@ async function setDefaultOrg(_: { org: string }, options: Command) {
 }
 
 async function listOrgs(opts: PaginationOptions, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("orgs")
-      .select(
-        `
-      id,
-      created_at,
-      name,
-      org_limits (
-        monthly_events_limit,
-        monthly_reads_limit
-      )
-    `,
-      )
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map((o) => ({
-      id: toOrgId(o.id),
-      createdAt: o.created_at,
-      name: o.name,
-      limits: o.org_limits && {
-        monthlyEventsLimit: singleton(o.org_limits).monthly_events_limit,
-        monthlyReadsLimit: singleton(o.org_limits).monthly_reads_limit,
-      },
-    }));
-  });
+  await paginateWithCursor(
+    (cursor) => client.orgs.list({ cursor }),
+    (page) => page.orgs,
+  );
 }
 
 async function createOrg(opts: { name: string }, options: Command) {
