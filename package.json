@@ -1,6 +1,6 @@
 {
   "name": "smply",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "The smply CLI for the StateBacked.dev XState backend as a service",
   "license": "MIT",
   "author": "Adam Berger <adam@statebacked.dev>",
