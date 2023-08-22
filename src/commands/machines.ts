@@ -1,12 +1,8 @@
 import { Command, InvalidArgumentError } from "commander";
 import {
   BuildOpts,
-  getLoggedInSupabaseClient,
   getStatebackedClient,
   prompt,
-  singleton,
-  toMachineVersionId,
-  toUserId,
   writeObj,
 } from "../utils.js";
 import { PaginationOptions, paginateWithCursor } from "../paginator.js";
@@ -71,49 +67,11 @@ export function addMachineCommands(cmd: Command) {
 }
 
 async function getMachine(opts: { machine: string }, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  const { data, error } = await s
-    .from("machines")
-    .select(
-      `
-        slug,
-        created_at,
-        created_by,
-        current_machine_versions (
-            machine_versions (
-                id,
-                client_info,
-                created_at
-            )
-        )
-    `,
-    )
-    .filter("slug", "eq", opts.machine)
-    .single();
-  if (error) {
-    if (error.code === "PGRST116") {
-      console.error(`Machine '${opts.machine}' not found`);
-      return;
-    }
-    console.error(error.message);
-    throw error;
-  }
+  const result = await client.machines.get(opts.machine);
 
-  const machineVersion = singleton(
-    singleton(data.current_machine_versions)?.machine_versions,
-  );
-
-  writeObj({
-    name: data.slug,
-    createdAt: data.created_at,
-    createdBy: toUserId(data.created_by),
-    currentVersion: machineVersion && {
-      id: toMachineVersionId(machineVersion.id),
-      createdAt: machineVersion.created_at,
-      clientInfo: machineVersion.client_info,
-    },
-  });
+  writeObj(result);
 }
 
 async function listMachines(opts: PaginationOptions, options: Command) {

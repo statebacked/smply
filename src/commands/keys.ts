@@ -3,12 +3,14 @@ import {
   PaginationOptions,
   getSortOpts,
   paginate,
+  paginateWithCursor,
   withPaginationOptions,
 } from "../paginator.js";
 import {
   getApiURL,
   getHeaders,
   getLoggedInSupabaseClient,
+  getStatebackedClient,
   toKeyId,
   toUserId,
   writeObj,
@@ -61,35 +63,12 @@ export function addKeysCommands(cmd: Command) {
 }
 
 async function listKeys(opts: PaginationOptions, options: Command) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  await paginate(opts, async ({ from, to }) => {
-    const { data, error } = await s
-      .from("keys")
-      .select(
-        `
-      id,
-      created_at,
-      name,
-      created_by,
-      scope
-    `,
-      )
-      .order("created_at", getSortOpts(opts))
-      .range(from, to);
-    if (error) {
-      console.error(error.message);
-      throw error;
-    }
-
-    return data.map((k) => ({
-      id: toKeyId(k.id),
-      createdAt: k.created_at,
-      name: k.name,
-      createdBy: toUserId(k.created_by),
-      scope: k.scope,
-    }));
-  });
+  await paginateWithCursor(
+    (cursor) => client.keys.list({ cursor }),
+    (k) => k.keys,
+  );
 }
 
 async function createKey(
@@ -124,26 +103,14 @@ async function createKey(
     }
   }
 
-  const headers = await getHeaders(options);
+  const client = await getStatebackedClient(options);
 
-  const createKeyResponse = await fetch(`${getApiURL(options)}/keys`, {
-    headers,
-    method: "POST",
-    body: JSON.stringify({
-      name: opts.name,
-      use: !opts.scopes || opts.scopes.length === 0 ? opts.use : undefined,
-      scopes: opts.scopes,
-    }),
+  const { id, key } = await client.keys.create({
+    name: opts.name,
+    use: opts.use as any,
+    scopes: opts.scopes as any,
   });
-  if (!createKeyResponse.ok) {
-    throw new Error(
-      `failed to create key (${
-        createKeyResponse.status
-      }): ${await createKeyResponse.text()}`,
-    );
-  }
 
-  const { id, key } = (await createKeyResponse.json()) as any;
   console.log(
     "Store this key safely now. You can create additional keys in the future but this key will never be shown again!",
   );

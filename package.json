@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@gjsify/esbuild-plugin-deno-loader": "^0.0.3",
-    "@statebacked/client": "^0.1.27",
+    "@statebacked/client": "^0.1.28",
     "@statebacked/token": "^0.2.0",
     "@supabase/supabase-js": "2.26.0",
     "commander": "11.0.0",

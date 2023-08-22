@@ -2,15 +2,11 @@ import { Command, InvalidArgumentError } from "commander";
 import {
   PaginationOptions,
   paginateWithCursor,
-  withPaginationOptions,
 } from "../paginator.js";
 import {
   BuildOpts,
-  getLoggedInSupabaseClient,
   getStatebackedClient,
   prompt,
-  singleton,
-  toMachineVersionId,
   writeObj,
 } from "../utils.js";
 
@@ -129,7 +125,7 @@ async function setDesiredMachineInstanceVersion(
 ) {
   const client = await getStatebackedClient(options);
 
-  await client.machineInstances.updateDesiredVersion(
+  await client.machineInstances.admin.updateDesiredVersion(
     opts.machine,
     opts.instance,
     {
@@ -223,74 +219,13 @@ async function getMachineInstance(
   opts: { machine: string; instance: string },
   options: Command,
 ) {
-  const s = await getLoggedInSupabaseClient(options);
+  const client = await getStatebackedClient(options);
 
-  const { data: machineData, error: machineError } = await s
-    .from("machines")
-    .select(`id, org_id`)
-    .filter("slug", "eq", opts.machine)
-    .single();
-
-  if (machineError) {
-    if (machineError.code === "PGRST116") {
-      console.error(`Machine '${opts.machine}' not found`);
-      return;
-    }
-    console.error("failed to retrieve machine", machineError.message);
-    throw machineError;
-  }
-
-  const { id: machineId, org_id: orgId } = machineData;
-
-  const { data, error } = await s
-    .from("machine_instances")
-    .select(
-      `
-        machine_versions (
-            id,
-            client_info,
-            machines (
-              slug
-            )
-        ),
-        extended_slug,
-        created_at,
-        machine_instance_state (
-            machine_transitions (
-                created_at,
-                state
-            )
-        )
-    `,
-    )
-    .filter("extended_slug", "eq", `${orgId}/${machineId}/${opts.instance}`)
-    .single();
-  if (error) {
-    if (error.code === "PGRST116") {
-      console.error(`Instance '${opts.instance}' not found`);
-      return;
-    }
-    console.error(error.message);
-    throw error;
-  }
-
-  const machineVersions = singleton(data.machine_versions);
-  const machineInstanceState = singleton(data.machine_instance_state);
-  const latestTransition = singleton(machineInstanceState?.machine_transitions);
-
-  writeObj({
-    machineVersionId: toMachineVersionId(machineVersions?.id),
-    machineVersionReference: machineVersions?.client_info,
-    machineName: singleton(machineVersions?.machines)?.slug,
-    createdAt: data.created_at,
-    name: data.extended_slug.split("/", 3)[2],
-    latestTransition: latestTransition && {
-      createdAt: latestTransition.created_at,
-      state: (latestTransition.state as any)?.value,
-      event: (latestTransition.state as any)?.event.data,
-      context: (latestTransition.state as any)?.context,
-    },
-  });
+  const result = await client.machineInstances.admin.get(
+    opts.machine,
+    opts.instance,
+  );
+  writeObj(result);
 }
 
 async function listInstanceTransitions(
