@@ -75,7 +75,7 @@ export const InnerComponent = ({ actor }) => {
 
 ```javascript
 import { createMachine } from "xstate";
-import type { AllowRead, AllowWrite } from "@statebacked/machine-def";
+import type { AllowRead, AllowWrite } from "@statebacked/machine";
 
 // super simple authorization
 // authContext comes from a JWT that you create with your user's information,
