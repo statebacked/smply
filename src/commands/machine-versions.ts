@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rmdir, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, rmdir, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { Command } from "commander";
@@ -68,32 +68,44 @@ assert(machine.definition);
 
 async function validateBundle(opts: { js: string; quiet?: boolean }) {
   const nodePath = process.execPath;
-  const proc = await spawn(
-    nodePath,
-    ["--input-type=module", "--eval", validationScript(opts.js)],
-    {
-      env: {
-        NODE_ENV: "production",
-      },
-      shell: false,
-      stdio: "pipe",
-    },
+
+  const tmpDir = await mkdtemp(
+    path.join(os.tmpdir(), path.basename(opts.js).replace(/\.[^/.]+$/, "")),
   );
+  const codePath = path.join(tmpDir, "bundle.mjs");
+  try {
+    await copyFile(opts.js, codePath);
 
-  proc.stderr.pipe(process.stderr);
+    const proc = await spawn(
+      nodePath,
+      ["--input-type=module", "--eval", validationScript(codePath)],
+      {
+        env: {
+          NODE_ENV: "production",
+        },
+        shell: false,
+        stdio: "pipe",
+      },
+    );
 
-  const code = await new Promise<number>((resolve) => {
-    proc.on("exit", () => {
-      resolve(proc.exitCode);
+    proc.stderr.pipe(process.stderr);
+
+    const code = await new Promise<number>((resolve) => {
+      proc.on("exit", () => {
+        resolve(proc.exitCode);
+      });
     });
-  });
 
-  if (code !== 0) {
-    throw new Error("Invalid bundle");
-  }
+    if (code !== 0) {
+      throw new Error("Invalid bundle");
+    }
 
-  if (!opts.quiet) {
-    console.log("Valid bundle");
+    if (!opts.quiet) {
+      console.log("Valid bundle");
+    }
+  } finally {
+    await unlink(codePath).catch(() => {});
+    await rmdir(tmpDir).catch(() => {});
   }
 }
 
@@ -137,18 +149,12 @@ export async function silencableCreateMachineVersion(
   if (!opts.skipValidation) {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), opts.machine));
     const codePath = path.join(tmpDir, "bundle.js");
-    const packageJsonPath = path.join(tmpDir, "package.json");
     try {
-      await Promise.all([
-        writeFile(packageJsonPath, `{"type": "module"}`, {
-          encoding: "utf8",
-        }),
-        writeFile(codePath, code.code, { encoding: "utf8" }),
-      ]);
+      await writeFile(codePath, code.code, { encoding: "utf8" });
       await validateBundle({ js: codePath, quiet: opts.quiet });
     } finally {
-      await Promise.all([unlink(codePath), unlink(packageJsonPath)]);
-      await rmdir(tmpDir);
+      await unlink(codePath).catch(() => {});
+      await rmdir(tmpDir).catch(() => {});
     }
   }
 
