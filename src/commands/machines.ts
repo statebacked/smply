@@ -50,6 +50,11 @@ export function addMachineCommands(cmd: Command) {
       "-n, --node <file>",
       "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. If neither of --js or --node are specified, the machine will be created without a version and a version may be added via the 'machines-versions create' command.",
     )
+    .option(
+      "-s, --skip-validation",
+      "Don't validate the bundle. Only valid if --js or --node is specified.",
+      false,
+    )
     .action(createMachine);
 
   machines
@@ -87,6 +92,7 @@ async function createMachine(
   opts: BuildOpts & {
     machine: string;
     versionReference?: string;
+    skipValidation: boolean;
   },
   options: Command,
 ) {
@@ -107,6 +113,7 @@ async function createMachine(
         js: opts.js,
         node: opts.node,
         deno: opts.deno,
+        skipValidation: opts.skipValidation,
         makeCurrent: true,
         quiet: true,
       },

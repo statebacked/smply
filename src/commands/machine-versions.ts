@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
 import { Command } from "commander";
 import { PaginationOptions, paginateWithCursor } from "../paginator.js";
 import {
@@ -34,6 +38,7 @@ export function addMachineVersionsCommands(cmd: Command) {
       "Make this version the current version",
       false,
     )
+    .option("-s, --skip-validation", "Don't validate the bundle", false)
     .action(createMachineVersion);
 
   machineVersions
@@ -41,6 +46,55 @@ export function addMachineVersionsCommands(cmd: Command) {
     .description("List versions of a machine definition")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(listMachineVersions);
+
+  machineVersions
+    .command("validate-bundle")
+    .requiredOption(
+      "-j, --js <file>",
+      "Path to the single javascript file that exports the machine definition.",
+    )
+    .action(validateBundle);
+}
+
+const validationScript = (file: string) => `
+import { allowRead, allowWrite, default as machine } from "${file}";
+assert(typeof allowRead === "function", "Bundle must export an allowRead function");
+assert(typeof allowWrite === "function", "Bundle must export an allowWrite function");
+assert(typeof machine === "object", "Bundle must default export a machine definition");
+assert("__xstatenode" in machine, "Bundle's default export must be a machine definition");
+// machine.definition resolves state references and throws for invalid ones
+assert(machine.definition);
+`;
+
+async function validateBundle(opts: { js: string; quiet?: boolean }) {
+  const nodePath = process.execPath;
+  const proc = await spawn(
+    nodePath,
+    ["--input-type=module", "--eval", validationScript(opts.js)],
+    {
+      env: {
+        NODE_ENV: "production",
+      },
+      shell: false,
+      stdio: "pipe",
+    },
+  );
+
+  proc.stderr.pipe(process.stderr);
+
+  const code = await new Promise<number>((resolve) => {
+    proc.on("exit", () => {
+      resolve(proc.exitCode);
+    });
+  });
+
+  if (code !== 0) {
+    throw new Error("Invalid bundle");
+  }
+
+  if (!opts.quiet) {
+    console.log("Valid bundle");
+  }
 }
 
 async function listMachineVersions(
@@ -60,6 +114,7 @@ async function createMachineVersion(
     machine: string;
     versionReference: string;
     makeCurrent: boolean;
+    skipValidation: boolean;
   },
   options: Command,
 ) {
@@ -71,12 +126,25 @@ export async function silencableCreateMachineVersion(
     machine: string;
     versionReference: string;
     makeCurrent: boolean;
+    skipValidation: boolean;
     quiet?: boolean;
   },
   options: Command,
 ) {
   const code = await buildFromCommand(opts);
   const gzippedCode = await gzip(code.code);
+
+  if (!opts.skipValidation) {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), opts.machine));
+    const codePath = path.join(tmpDir, "bundle.js");
+    await Promise.all([
+      writeFile(path.join(tmpDir, "package.json"), `{"type": "module"}`, {
+        encoding: "utf8",
+      }),
+      writeFile(codePath, code.code, { encoding: "utf8" }),
+    ]);
+    await validateBundle({ js: codePath, quiet });
+  }
 
   const client = await getStatebackedClient(options);
 
