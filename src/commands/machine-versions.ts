@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rmdir, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { Command } from "commander";
@@ -137,13 +137,19 @@ export async function silencableCreateMachineVersion(
   if (!opts.skipValidation) {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), opts.machine));
     const codePath = path.join(tmpDir, "bundle.js");
-    await Promise.all([
-      writeFile(path.join(tmpDir, "package.json"), `{"type": "module"}`, {
-        encoding: "utf8",
-      }),
-      writeFile(codePath, code.code, { encoding: "utf8" }),
-    ]);
-    await validateBundle({ js: codePath, quiet });
+    const packageJsonPath = path.join(tmpDir, "package.json");
+    try {
+      await Promise.all([
+        writeFile(packageJsonPath, `{"type": "module"}`, {
+          encoding: "utf8",
+        }),
+        writeFile(codePath, code.code, { encoding: "utf8" }),
+      ]);
+      await validateBundle({ js: codePath, quiet: opts.quiet });
+    } finally {
+      await Promise.all([unlink(codePath), unlink(packageJsonPath)]);
+      await rmdir(tmpDir);
+    }
   }
 
   const client = await getStatebackedClient(options);
