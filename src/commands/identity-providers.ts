@@ -137,7 +137,9 @@ async function upsertAuth0IdentityProvider(
   },
   options: Command,
 ) {
-  const domain = new URL(opts.domain).hostname;
+  const domain = new URL(
+    opts.domain.startsWith("https://") ? opts.domain : `https://${opts.domain}`,
+  ).hostname;
 
   return upsertIdentityProvider(
     {
