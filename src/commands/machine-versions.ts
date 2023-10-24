@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdtemp, rmdir, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { PaginationOptions, paginateWithCursor } from "../paginator.js";
 import {
   getStatebackedClient,
@@ -32,6 +32,10 @@ export function addMachineVersionsCommands(cmd: Command) {
     .option(
       "-n, --node <file>",
       "Path to the Node.js entrypoint to use as the machine definition. We will build the file into a single, self-contained ECMAScript module. Exactly one of --js or --node must be specified.",
+    )
+    .option(
+      "-d, --index-selectors <indexSelectors>",
+      "JSON object mapping index names to JSON path expressions that point into the context for each machine instance to extract the value that will be indexed. Keys must match the indexes created for the machine. Any values that are not specified will default to the existing index selectors for the current version for the machine.",
     )
     .option(
       "-c, --make-current",
@@ -127,10 +131,30 @@ async function createMachineVersion(
     versionReference: string;
     makeCurrent: boolean;
     skipValidation: boolean;
+    indexSelectors?: string;
   },
   options: Command,
 ) {
-  await silencableCreateMachineVersion(opts, options);
+  const indexSelectors = opts.indexSelectors
+    ? JSON.parse(opts.indexSelectors)
+    : undefined;
+
+  if (
+    indexSelectors &&
+    Object.entries(indexSelectors).some(([k, v]) => !k || typeof v !== "string")
+  ) {
+    throw new InvalidArgumentError(
+      "indexSelectors must be a JSON object mapping index names to JSON path expressions",
+    );
+  }
+
+  await silencableCreateMachineVersion(
+    {
+      ...opts,
+      indexSelectors,
+    },
+    options,
+  );
 }
 
 export async function silencableCreateMachineVersion(
@@ -139,6 +163,7 @@ export async function silencableCreateMachineVersion(
     versionReference: string;
     makeCurrent: boolean;
     skipValidation: boolean;
+    indexSelectors?: Record<string, string>;
     quiet?: boolean;
   },
   options: Command,
@@ -164,6 +189,7 @@ export async function silencableCreateMachineVersion(
     clientInfo: opts.versionReference,
     makeCurrent: opts.makeCurrent,
     gzippedCode,
+    indexSelectors: opts.indexSelectors,
   });
 
   if (!opts.quiet) {

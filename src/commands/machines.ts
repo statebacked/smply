@@ -38,6 +38,14 @@ export function addMachineCommands(cmd: Command) {
       },
     )
     .option(
+      "-i, --index <index...>",
+      "Names of indexes to create for instances of this machine. If you specify one of --js or --node, use --index-selectors instead to specify the actual index selectors. If specified multiple times, multiple indexes will be created.",
+    )
+    .option(
+      "-d, --index-selectors <indexSelectors>",
+      "JSON object mapping index names to JSON path expressions that point into the context for each machine instance to extract the value that will be indexed. If you are not specifying --js or --node to create an initial machine version, use --index instead to specify the names of the indexes only.",
+    )
+    .option(
       "-r, --version-reference <versionReference>",
       "Name for the first version of the machine. E.g. git commit sha or semantic version identifier.",
       "0.0.1",
@@ -93,12 +101,30 @@ async function createMachine(
     machine: string;
     versionReference?: string;
     skipValidation: boolean;
+    index?: string[];
+    indexSelectors?: string;
   },
   options: Command,
 ) {
   const client = await getStatebackedClient(options);
 
-  await client.machines.create(opts.machine);
+  const indexSelectors = opts.indexSelectors
+    ? JSON.parse(opts.indexSelectors)
+    : undefined;
+  if (
+    indexSelectors &&
+    Object.entries(indexSelectors).some(([k, v]) => !k || typeof v !== "string")
+  ) {
+    throw new InvalidArgumentError(
+      "indexSelectors must be a JSON object mapping index names to JSON path expressions",
+    );
+  }
+
+  const indexes = indexSelectors ? Object.keys(indexSelectors) : opts.index;
+
+  await client.machines.create(opts.machine, {
+    indexes,
+  });
 
   const output = {
     name: opts.machine,
@@ -114,6 +140,7 @@ async function createMachine(
         node: opts.node,
         deno: opts.deno,
         skipValidation: opts.skipValidation,
+        indexSelectors,
         makeCurrent: true,
         quiet: true,
       },
