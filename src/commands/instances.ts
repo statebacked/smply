@@ -291,8 +291,8 @@ async function queryMachineInstances(
         cursor,
       }),
     (page) =>
-      page.machineInstances.map((i) => ({
-        name: i.instanceName,
+      page.instances.map((i) => ({
+        name: i.slug,
         indexValue: i.indexValue,
       })),
   );
