@@ -14,6 +14,25 @@ export function addMachineInstancesCommands(cmd: Command) {
     .action(listMachineInstances);
 
   instances
+    .command("query")
+    .description("Query for machine instances")
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .requiredOption("-i, --index <index>", "Index name to query (required)")
+    .option(
+      "-o, --op <op>",
+      "Operator to use for the query. One of 'eq', 'ne', 'lt', 'lte', 'gt', 'gte'. No filter will be applied if not specified.",
+    )
+    .option(
+      "-v, --value <value>",
+      "Value to use for the operator (--op). No filter will be applied if not specified.",
+    )
+    .option(
+      "-s, --sort <sort>",
+      "Sort order. One of 'asc' or 'desc'. Defaults to 'asc'.",
+    )
+    .action(queryMachineInstances);
+
+  instances
     .command("get")
     .description("Get a machine instance")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
@@ -232,6 +251,50 @@ async function listInstanceTransitions(
         cursor,
       }),
     (page) => page.transitions,
+  );
+}
+
+async function queryMachineInstances(
+  opts: PaginationOptions & {
+    machine: string;
+    index: string;
+    op?: "eq" | "ne" | "lt" | "lte" | "gt" | "gte";
+    value?: string;
+    sort?: "asc" | "desc";
+  },
+  options: Command,
+) {
+  if (opts.op && !["eq", "ne", "lt", "lte", "gt", "gte"].includes(opts.op)) {
+    throw new InvalidArgumentError(
+      "op must be one of 'eq', 'ne', 'lt', 'lte', 'gt', 'gte'",
+    );
+  }
+
+  if (opts.sort && !["asc", "desc"].includes(opts.sort)) {
+    throw new InvalidArgumentError("sort must be one of 'asc' or 'desc'");
+  }
+
+  if ((opts.op && !opts.value) || (!opts.op && opts.value)) {
+    throw new InvalidArgumentError(
+      "op and value must both be specified or neither must be specified",
+    );
+  }
+
+  const client = await getStatebackedClient(options);
+
+  await paginateWithCursor(
+    (cursor) =>
+      client.machineInstances.query(opts.machine, opts.index, {
+        dir: opts.sort,
+        op: opts.op,
+        value: opts.value,
+        cursor,
+      }),
+    (page) =>
+      page.machineInstances.map((i) => ({
+        name: i.instanceName,
+        indexValue: i.indexValue,
+      })),
   );
 }
 
