@@ -8,6 +8,7 @@ const allowedScopes = [
   "state.read",
   "instances.read",
   "instances.write",
+  "indexes.read",
   "machines.read",
   "machines.write",
   "machine-versions.read",
