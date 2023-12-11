@@ -5,6 +5,23 @@ import * as os from "node:os";
 import { denoPlugin } from "@gjsify/esbuild-plugin-deno-loader";
 
 export async function build(inputFile: string, inputType: "node" | "deno") {
+  const [bundled, externalized] = await Promise.all([
+    _build(inputFile, inputType, false),
+    _build(inputFile, inputType, true),
+  ]);
+
+  return {
+    fileName: externalized.fileName,
+    code: externalized.code,
+    bundled: bundled.code,
+  };
+}
+
+async function _build(
+  inputFile: string,
+  inputType: "node" | "deno",
+  externalizeXState: boolean,
+) {
   const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "smply-"));
   const outFile = path.join(outDir, "machine.js");
   try {
@@ -22,6 +39,14 @@ export async function build(inputFile: string, inputType: "node" | "deno") {
       },
       drop: ["debugger"],
       plugins: inputType === "deno" ? [denoPlugin()] : [],
+      ...(externalizeXState
+        ? {
+            external: ["npm:xstate"],
+            alias: {
+              xstate: "npm:xstate",
+            },
+          }
+        : {}),
     });
 
     const code = await fs.readFile(outFile, { encoding: "utf8" });

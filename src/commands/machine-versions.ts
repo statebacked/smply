@@ -175,7 +175,7 @@ export async function silencableCreateMachineVersion(
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), opts.machine));
     const codePath = path.join(tmpDir, "bundle.js");
     try {
-      await writeFile(codePath, code.code, { encoding: "utf8" });
+      await writeFile(codePath, code.bundled, { encoding: "utf8" });
       await validateBundle({ js: codePath, quiet: opts.quiet });
     } finally {
       await unlink(codePath).catch(() => {});

@@ -270,10 +270,14 @@ export async function buildFromCommand(opts: BuildOpts) {
   }
 
   const code = opts.js
-    ? {
-        fileName: path.basename(opts.js),
-        code: await fs.readFile(opts.js, { encoding: "utf8" }),
-      }
+    ? (async () => {
+        const code = await fs.readFile(opts.js, { encoding: "utf8" });
+        return {
+          fileName: path.basename(opts.js),
+          code,
+          bundled: code,
+        };
+      })()
     : opts.deno
     ? await build(opts.deno, "deno")
     : opts.node
