@@ -200,7 +200,7 @@ async function acceptInvitation(
   );
 
   const res = await fetch(
-    `${getApiURL(options)}/${encodeURIComponent(opts.invitation)}`,
+    `${getApiURL(options)}/invitations/${encodeURIComponent(opts.invitation)}`,
     {
       method: "PUT",
       headers,
