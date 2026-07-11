@@ -1,6 +1,7 @@
 import { Command, InvalidArgumentError } from "commander";
 import { PaginationOptions, paginateWithCursor } from "../paginator.js";
 import { BuildOpts, getStatebackedClient, prompt, writeObj } from "../utils.js";
+import { addUsageDateRangeOptions, getUsage } from "./usage.js";
 
 export function addMachineInstancesCommands(cmd: Command) {
   const instances = cmd
@@ -38,6 +39,13 @@ export function addMachineInstancesCommands(cmd: Command) {
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .requiredOption("-i, --instance <instance>", "Instance name (required)")
     .action(getMachineInstance);
+
+  addUsageDateRangeOptions(
+    instances.command("usage").description("Get usage counts"),
+  )
+    .requiredOption("-m, --machine <machine>", "Machine name (required)")
+    .option("-i, --instance <instance>", "Instance name")
+    .action(getUsage);
 
   instances
     .command("create")

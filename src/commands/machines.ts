@@ -3,6 +3,7 @@ import { BuildOpts, getStatebackedClient, prompt, writeObj } from "../utils.js";
 import { PaginationOptions, paginateWithCursor } from "../paginator.js";
 import { silencableCreateMachineVersion } from "./machine-versions.js";
 import { errors } from "@statebacked/client";
+import { addUsageDateRangeOptions, getUsage } from "./usage.js";
 
 export function addMachineCommands(cmd: Command) {
   const machines = cmd
@@ -19,6 +20,13 @@ export function addMachineCommands(cmd: Command) {
     .description("Get a machine definition")
     .requiredOption("-m, --machine <machine>", "Machine name (required)")
     .action(getMachine);
+
+  addUsageDateRangeOptions(
+    machines.command("usage").description("Get usage counts"),
+  )
+    .option("-m, --machine <machine>", "Machine name")
+    .option("-v, --version <version>", "Machine version ID")
+    .action(getUsage);
 
   machines
     .command("create")

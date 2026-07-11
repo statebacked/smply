@@ -25,6 +25,7 @@ import { addMigrationsCommands } from "./commands/migrations.js";
 import { addLogsCommands } from "./commands/logs.js";
 import { addIdentityProviderCommands } from "./commands/identity-providers.js";
 import { addTokenProviderCommands } from "./commands/token-providers.js";
+import { addUsageCommand } from "./commands/usage.js";
 
 globalThis.fetch = fetch as any;
 globalThis.FormData = FormData as any;
@@ -91,6 +92,8 @@ async function main() {
   addMachineInstancesCommands(program);
 
   addLogsCommands(program);
+
+  addUsageCommand(program);
 
   const orgs = program.command("orgs").description("Manage organizations");
 
